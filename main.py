@@ -7,15 +7,21 @@ from dataset import GAUSSIAN_QUANTILES, MNIST, MNIST_TYPE, MOON, RANDOM, CLASSIF
 from experiment import Analysis, Experiment
 from torchays import nn
 from torchays.models import LeNet, TestResNet, TestTNetLinear
+from torchays.cpa import ProjectWrapper
 
 GPU_ID = 0
 SEED = 5
 NAME = "Linear"
 # ===========================================
-TYPE = CLASSIFICATION
+TYPE = MNIST_TYPE
 # ===========================================
+# Net
 # Test-Net
 N_LAYERS = [16, 16, 16]
+# Project, "None"
+PROJ_DIM = (391, 400)
+# the values of projection
+PROJ_VALUES = torch.zeros((1, 28, 28)) + 0.5
 # ===========================================
 # Dataset
 N_SAMPLES = 1000
@@ -25,29 +31,29 @@ N_CLASSES = 2
 # only RANDOM
 IN_FEATURES = 2
 # is download for mnist
-DOWNLOAD = False
+DOWNLOAD = True
 # ===========================================
-# Experiment
-IS_EXPERIMENT = True
 # Training
 # is training the network.
 IS_TRAIN = False
-MAX_EPOCH = 1000
-SAVE_EPOCH = [1000]
-BATCH_SIZE = 64
+MAX_EPOCH = 5
+SAVE_EPOCH = [5]
+BATCH_SIZE = 256
 LR = 1e-3
 # ===========================================
 BOUND = (-1, 1)
 # the depth of the NN to draw
 DEPTH = -1
 # the number of the workers
-WORKERS = 1
+WORKERS = 16
 # with best epoch
 BEST_EPOCH = False
 # ===========================================
 # Drawing
+# Experiment
+IS_EXPERIMENT = True
 # is drawing the region picture. Only for 2d input.
-IS_DRAW = False
+IS_DRAW = True
 # is drawing the 3d region picture when "IS_DRAW" is True.
 IS_DRAW_3D = False
 # is handlering the hyperplanes arrangement.
@@ -55,9 +61,9 @@ IS_DRAW_HPAS = False
 IS_STATISTIC_HPAS = False
 # ===========================================
 # Analysis
-IS_ANALYSIS = True
+IS_ANALYSIS = False
 # draw the dataset distribution
-WITH_DATASET = True
+WITH_DATASET = False
 # ===========================================
 # path
 TAG = ""
@@ -74,9 +80,13 @@ def init_fun():
     np.random.seed(SEED)
 
 
-def net(type: str = MOON):
+def net(
+    type: str = MOON,
+    proj_dims: tuple | None = None,
+    proj_values: torch.Tensor = None,
+):
 
-    def make_net(n_classes: int):
+    def make_net(n_classes: int, training: bool = True):
         if type == MNIST_TYPE:
             return LeNet()
         return TestTNetLinear(
@@ -86,6 +96,20 @@ def net(type: str = MOON):
             n_classes=n_classes,
             norm_layer=nn.BatchNormNone,
         )
+
+    if (proj_dims and proj_values) is not None:
+
+        def wrapper(n_classes: int, training: bool = True):
+            net = make_net(n_classes, training)
+            if training:
+                return net
+            return ProjectWrapper(
+                net,
+                proj_dims=proj_dims,
+                proj_values=proj_values,
+            )
+
+        return wrapper
 
     return make_net
 
@@ -110,7 +134,7 @@ if __name__ == "__main__":
     if IS_EXPERIMENT:
         exp = Experiment(
             save_dir=save_dir,
-            net=net(type=TYPE),
+            net=net(type=TYPE, proj_dims=PROJ_DIM, proj_values=PROJ_VALUES),
             dataset=dataset(save_dir, type=TYPE),
             init_fun=init_fun,
             save_epoch=SAVE_EPOCH,

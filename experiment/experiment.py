@@ -27,7 +27,7 @@ class _base:
         self,
         save_dir: str,
         *,
-        net: Callable[[int], Model] = None,
+        net: Callable[[int, bool], Model] = None,
         dataset: Callable[..., Tuple[Dataset, int]] = None,
         save_epoch: List[int] = [0, 0.1, 0.5, 1, 2, 4, 6, 8, 10, 15, 20, 30, 50, 80, 100],
         device: torch.device = torch.device('cpu'),
@@ -37,6 +37,7 @@ class _base:
         self.dataset = dataset
         self.save_epoch = save_epoch
         self.device = device
+        self.training = True
         self.root_dir = None
 
     def get_root(self):
@@ -46,7 +47,7 @@ class _base:
 
     def _init_model(self):
         dataset, n_classes = self.dataset()
-        net = self.net(n_classes).to(self.device)
+        net = self.net(n_classes, self.training).to(self.device)
         self._init_dir(net.name)
         return net, dataset, n_classes
 
@@ -80,7 +81,7 @@ class Train(_base):
     def __init__(
         self,
         save_dir: str,
-        net: Callable[[int], Model],
+        net: Callable[[int, bool], Model],
         dataset: Callable[..., Tuple[Dataset, int]],
         *,
         save_epoch: List[int] = [0, 0.1, 0.5, 1, 2, 4, 6, 8, 10, 15, 20, 30, 50, 80, 100],
@@ -156,7 +157,7 @@ class CPAs(_base):
     def __init__(
         self,
         save_dir: str,
-        net: Callable[[int], Model],
+        net: Callable[[int, bool], Model],
         dataset: Callable[..., Tuple[Dataset, int]],
         *,
         workers: int = 1,
@@ -177,6 +178,7 @@ class CPAs(_base):
             save_epoch=save_epoch,
             device=device,
         )
+        self.training = False
         self.workers, self.multi = self._works(workers)
         self.bounds = bounds
         self.is_draw = is_draw
@@ -203,8 +205,9 @@ class CPAs(_base):
             for model_name in model_list:
                 epoch = float(model_name.split("_")[-1][:-4])
                 if epoch not in self.save_epoch:
-                    if self.best_epoch and "best" not in model_name:
-                        continue
+                    if self.best_epoch:
+                        if "best" not in model_name:
+                            continue
                     else:
                         continue
                 print(f"Solve fileName: {model_name} ....")
@@ -219,10 +222,14 @@ class CPAs(_base):
                     os.path.join(save_dir, "region.log"),
                     multi=self.multi,
                 )
+                try:
+                    input_size = net.input_size
+                except:
+                    input_size = dataset.input_size
                 count = cpa.start(
                     net,
                     bounds=self.bounds,
-                    input_size=dataset.input_size,
+                    input_size=input_size,
                     depth=depth,
                     handler=handler,
                     logger=logger,
@@ -266,7 +273,7 @@ class CPAs(_base):
 class Experiment(_base):
     def __init__(
         self,
-        net: Callable[[int], Model],
+        net: Callable[[int, bool], Model],
         dataset: Callable[..., Tuple[Dataset, int]],
         save_dir: str,
         init_fun: Callable[..., None],
