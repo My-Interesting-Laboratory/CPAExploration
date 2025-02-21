@@ -1,10 +1,12 @@
+import os
 from typing import Any, Tuple
 
 from PIL import Image
+from torch.utils import data
 from torchvision.datasets import mnist
-from torchvision.transforms import ToTensor, Compose
+from torchvision.transforms import Compose, ToTensor
 
-MNIST_TYPE: str = "mnist"
+from .dataset import Dataset
 
 
 def _transform(img: Image.Image):
@@ -40,3 +42,16 @@ class MNIST(mnist.MNIST):
             target = self.target_transform(target)
 
         return img, target
+
+
+class Mnist(Dataset):
+    def __init__(self, root: str, download: bool = True):
+        super().__init__("mnist", root)
+        self.download = download
+
+    def make_dataset(self) -> Tuple[data.Dataset, int]:
+        mnist = MNIST(root=self.path, download=self.download)
+        return mnist, len(mnist.classes)
+
+    def make_path(self):
+        return os.path.join(self.root, self.type)

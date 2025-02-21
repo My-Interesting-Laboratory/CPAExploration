@@ -1,9 +1,9 @@
+import json
 import math
 import os
 from copy import deepcopy
 from typing import Any, Callable, List, Tuple
 
-from sympy import false
 import torch
 from torch.utils import data
 
@@ -43,7 +43,7 @@ class _base:
 
     def get_root(self):
         if self.root_dir is None:
-            self.root_dir = os.path.join(self.save_dir, self.net(0, false).name)
+            self.root_dir = os.path.join(self.save_dir, self.net(0, False).name)
         return self.root_dir
 
     def _init_model(self):
@@ -147,8 +147,7 @@ class Train(_base):
                 acc = self.val_net(net, train_loader).cpu().numpy()
                 print(f'Epoch: {epoch+1} / {self.max_epoch}, Loss: {loss_sum:.4f}, Accuracy: {acc:.4f}')
                 if acc > best_acc:
-                    best_acc = acc
-                    best_epoch = epoch
+                    best_acc, best_epoch = acc, epoch
                     best_dict = deepcopy(net.state_dict())
         torch.save(best_dict, os.path.join(self.model_dir, f'net_best_{best_epoch+1}.pth'))
         print(f'Best_Epoch: {best_epoch+1} / {self.max_epoch}, Accuracy: {best_acc:.4f}')
@@ -196,6 +195,14 @@ class CPAs(_base):
             return 1, False
         return workers, True
 
+    def _is_continue(self, model_name: str):
+        epoch = float(model_name.split("_")[-1][:-4])
+        if epoch in self.save_epoch:
+            return False
+        if self.best_epoch and "best" in model_name:
+            return False
+        return True
+
     def run(self):
         net, dataset, n_classes = self._init_model()
         depth = self.depth if self.depth >= 0 else net.n_relu
@@ -204,13 +211,8 @@ class CPAs(_base):
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
             for model_name in model_list:
-                epoch = float(model_name.split("_")[-1][:-4])
-                if epoch not in self.save_epoch:
-                    if self.best_epoch:
-                        if "best" not in model_name:
-                            continue
-                    else:
-                        continue
+                if self._is_continue(model_name):
+                    continue
                 print(f"Solve fileName: {model_name} ....")
                 save_dir = os.path.join(self.experiment_dir, os.path.splitext(model_name)[0])
                 os.makedirs(save_dir, exist_ok=True)
@@ -239,36 +241,25 @@ class CPAs(_base):
                 if self.is_draw:
                     draw_dir = os.path.join(save_dir, f"draw-region-{depth}")
                     os.makedirs(draw_dir, exist_ok=True)
-                    dri = DrawRegionImage(
-                        count,
-                        handler.funs,
-                        handler.regions,
-                        handler.points,
-                        draw_dir,
-                        net,
-                        n_classes,
-                        bounds=self.bounds,
-                        device=self.device,
-                    )
+                    dri = DrawRegionImage(count, handler.funs, handler.regions, handler.points, draw_dir, net, n_classes, bounds=self.bounds, device=self.device)
                     dri.draw(self.is_draw_3d)
                 if self.is_hpas:
-                    hpas = HyperplaneArrangements(
-                        save_dir,
-                        handler.hyperplane_arrangements,
-                        self.bounds,
-                    )
-                    hpas.run(
-                        is_draw=self.is_draw_hpas,
-                        is_statistic=self.is_statistic_hpas,
-                    )
-                dataSaveDict = {
+                    hpas = HyperplaneArrangements(save_dir, handler.hyperplane_arrangements, self.bounds)
+                    hpas.run(is_draw=self.is_draw_hpas, is_statistic=self.is_statistic_hpas)
+                data_dict = {
                     "funcs": handler.funs,
                     "regions": handler.regions,
                     "points": handler.points,
                     "regionNum": count,
                     "accuracy": acc,
                 }
-                torch.save(dataSaveDict, os.path.join(save_dir, "net_regions.pkl"))
+                torch.save(data_dict, os.path.join(save_dir, "net_regions.pkl"))
+                result = {"regions": count, "accuracy": f"{acc:.4f}"}
+                with open(os.path.join(save_dir, "results.json"), "w") as w:
+                    json.dump(
+                        result,
+                        w,
+                    )
 
 
 class Experiment(_base):

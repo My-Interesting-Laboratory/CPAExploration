@@ -79,7 +79,7 @@ class CPA:
         *,
         bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
         input_size: tuple = (2,),
-    ):
+    ) -> int:
         # Initialize the parameters
         net.origin_size = torch.Size(input_size)
         dim = net.origin_size.numel()
