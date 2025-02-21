@@ -16,7 +16,7 @@ class TestNetLinear(nn.Module):
         norm_layer=nn.BatchNorm1d,
     ):
         super(TestNetLinear, self).__init__()
-        self.name = f"{name}-{layers}".replace(' ', '')
+        self.name = name.replace(' ', '')
         self.n_layers = len(layers)
         self.n_relu = self.n_layers - 1
         self.relu = nn.ReLU()
@@ -70,7 +70,7 @@ class TestResNet(nn.Module):
         is_no_res: bool = False,
     ):
         super(TestResNet, self).__init__()
-        self.name = f"{name}-{layers}".replace(' ', '')
+        self.name = name.replace(' ', '')
         self._is_no_res = is_no_res
         self.n_layers = len(layers)
         self.n_relu = (self.n_layers - 1) * 2

@@ -11,7 +11,7 @@ from torchays.cpa import ProjectWrapper
 
 GPU_ID = 0
 SEED = 5
-NAME = "Linear"
+NAME = "Linear-[32,32,32]"
 # ===========================================
 TYPE = MOON
 # ===========================================
@@ -75,6 +75,14 @@ if len(TAG) > 0:
 save_dir = os.path.join(cache_dir, f"{TYPE}-{N_SAMPLES}-{IN_FEATURES}-{SEED}")
 
 
+def save_dir(tag: str = "", cache: str = "cache"):
+    root_dir = os.path.abspath("./")
+    cache_dir = os.path.join(root_dir, cache)
+    if tag is not None and len(TAG) > 0:
+        cache_dir = os.path.join(cache_dir, tag)
+    s_dir = os.path.join(cache_dir, f"{TYPE}-{N_SAMPLES}-{IN_FEATURES}-{SEED}")
+
+
 def init_fun():
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
@@ -129,7 +137,7 @@ def dataset(
     return make_dataset
 
 
-if __name__ == "__main__":
+def main():
     os.makedirs(save_dir, exist_ok=True)
     device = torch.device('cuda', GPU_ID) if torch.cuda.is_available() else torch.device('cpu')
     if IS_EXPERIMENT:
@@ -164,3 +172,7 @@ if __name__ == "__main__":
             with_dataset=WITH_DATASET,
         )
         analysis()
+
+
+if __name__ == "__main__":
+    main()

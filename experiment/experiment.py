@@ -3,6 +3,7 @@ import os
 from copy import deepcopy
 from typing import Any, Callable, List, Tuple
 
+from sympy import false
 import torch
 from torch.utils import data
 
@@ -42,7 +43,7 @@ class _base:
 
     def get_root(self):
         if self.root_dir is None:
-            self.root_dir = os.path.join(self.save_dir, self.net(0).name)
+            self.root_dir = os.path.join(self.save_dir, self.net(0, false).name)
         return self.root_dir
 
     def _init_model(self):
