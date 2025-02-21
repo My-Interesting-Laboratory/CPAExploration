@@ -6,20 +6,20 @@ import torch
 from dataset import GAUSSIAN_QUANTILES, MNIST, MNIST_TYPE, MOON, RANDOM, CLASSIFICATION, simple_get_data
 from experiment import Analysis, Experiment
 from torchays import nn
-from torchays.models import LeNet, TestResNet, TestTNetLinear
+from torchays.models import LeNet, TestResNet, TestNetLinear
 from torchays.cpa import ProjectWrapper
 
 GPU_ID = 0
 SEED = 5
 NAME = "Linear"
 # ===========================================
-TYPE = MNIST_TYPE
+TYPE = MOON
 # ===========================================
 # Net
 # Test-Net
-N_LAYERS = [16, 16, 16]
+N_LAYERS = [32, 32, 32]
 # Project, "None"
-PROJ_DIM = (391, 400)
+PROJ_DIM = None
 # the values of projection
 PROJ_VALUES = torch.zeros((1, 28, 28)) + 0.5
 # ===========================================
@@ -35,17 +35,17 @@ DOWNLOAD = True
 # ===========================================
 # Training
 # is training the network.
-IS_TRAIN = False
-MAX_EPOCH = 5
-SAVE_EPOCH = [5]
-BATCH_SIZE = 256
+IS_TRAIN = True
+MAX_EPOCH = 1000
+SAVE_EPOCH = [50, 100, 200, 300, 400, 500, 700, 1000]
+BATCH_SIZE = 64
 LR = 1e-3
 # ===========================================
 BOUND = (-1, 1)
 # the depth of the NN to draw
 DEPTH = -1
 # the number of the workers
-WORKERS = 16
+WORKERS = 32
 # with best epoch
 BEST_EPOCH = False
 # ===========================================
@@ -58,7 +58,7 @@ IS_DRAW = True
 IS_DRAW_3D = False
 # is handlering the hyperplanes arrangement.
 IS_DRAW_HPAS = False
-IS_STATISTIC_HPAS = False
+IS_STATISTIC_HPAS = True
 # ===========================================
 # Analysis
 IS_ANALYSIS = False
@@ -66,7 +66,8 @@ IS_ANALYSIS = False
 WITH_DATASET = False
 # ===========================================
 # path
-TAG = ""
+TAG = "batch_norm"
+
 root_dir = os.path.abspath("./")
 cache_dir = os.path.join(root_dir, "cache")
 if len(TAG) > 0:
@@ -89,12 +90,12 @@ def net(
     def make_net(n_classes: int, training: bool = True):
         if type == MNIST_TYPE:
             return LeNet()
-        return TestTNetLinear(
+        return TestNetLinear(
             in_features=IN_FEATURES,
             layers=N_LAYERS,
             name=NAME,
             n_classes=n_classes,
-            norm_layer=nn.BatchNormNone,
+            norm_layer=nn.BatchNorm1d,
         )
 
     if (proj_dims and proj_values) is not None:

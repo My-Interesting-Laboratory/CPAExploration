@@ -6,7 +6,7 @@ from .. import nn
 from ..nn.modules import BIAS_GRAPH, WEIGHT_GRAPH, get_input
 
 
-class TestTNetLinear(nn.Module):
+class TestNetLinear(nn.Module):
     def __init__(
         self,
         in_features=2,
@@ -15,7 +15,7 @@ class TestTNetLinear(nn.Module):
         n_classes=2,
         norm_layer=nn.BatchNorm1d,
     ):
-        super(TestTNetLinear, self).__init__()
+        super(TestNetLinear, self).__init__()
         self.name = f"{name}-{layers}".replace(' ', '')
         self.n_layers = len(layers)
         self.n_relu = self.n_layers - 1
