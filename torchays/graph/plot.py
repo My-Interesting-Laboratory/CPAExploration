@@ -6,20 +6,33 @@ import numpy as np
 from mpl_toolkits.mplot3d import axes3d
 from polytope import polytope
 
+# COLOR = (
+#     'lightcoral',
+#     'royalblue',
+#     'limegreen',
+#     'gold',
+#     'darkorchid',
+#     'aqua',
+#     'tomato',
+#     'deeppink',
+#     'teal',
+# )
+
 COLOR = (
-    'lightcoral',
-    'royalblue',
-    'limegreen',
-    'gold',
-    'darkorchid',
-    'aqua',
-    'tomato',
-    'deeppink',
-    'teal',
+    '#FA7F6F',
+    '#82B0D2',
+    '#FFBE7A',
+    '#8ECFC9',
+    '#BEB8DC',
+    '#CFEAF1',
+    '#F6CAE5',
+    '#F0988C',
+    '#B883D4',
 )
 
 
 def color(idx: int):
+    idx = idx % len(COLOR)
     return COLOR[idx]
 
 
@@ -31,10 +44,10 @@ def plot_regions(
     functions_list: List[np.ndarray],
     regions: List[np.ndarray],
     ax: plt.Axes,
-    color: Callable[[int], Any] = _color,
+    color: Callable[[int], Any] = color,
     alpha=1.0,
     edgecolor="w",
-    linewidth=0.01,
+    linewidth=0.2,
     linestyle="-",
     xlim=(-1, 1),
     ylim=(-1, 1),

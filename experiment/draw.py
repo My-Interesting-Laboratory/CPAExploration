@@ -54,7 +54,9 @@ class DrawRegionImage:
             self.funcs,
             self.regions,
             ax=ax,
+            color=color,
             edgecolor="gray",
+            linewidth=0.2,
             xlim=self.bounds,
             ylim=self.bounds,
         )
