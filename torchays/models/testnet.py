@@ -1,4 +1,4 @@
-from typing import List
+from typing import Callable, List
 
 import torch
 
@@ -14,9 +14,11 @@ class TestNetLinear(nn.Module):
         name: str = "Linear",
         n_classes=2,
         norm_layer=nn.BatchNorm1d,
+        handler: Callable[[str, torch.Tensor, str], None] = None,
     ):
         super(TestNetLinear, self).__init__()
         self.name = name.replace(' ', '')
+        self.handler = handler
         self.n_layers = len(layers)
         self.n_relu = self.n_layers - 1
         self.relu = nn.ReLU()
@@ -28,13 +30,20 @@ class TestNetLinear(nn.Module):
             self.add_module(f"{i+1}_norm", self._norm_layer(layers[i + 1]))
         self.add_module(f"{self.n_layers}", nn.Linear(layers[-1], n_classes, bias=True))
 
+    def _handler(self, k: str, v: torch.Tensor, description: str = ""):
+        if self.handler is None or self.training:
+            return
+        self.handler(k, v, description)
+
     def forward(self, x):
         x = self._modules['0'](x)
         x = self._modules["0_norm"](x)
+        self._handler("0_norm", x, "")
         x = self.relu(x)
         for i in range(1, self.n_layers):
             x = self._modules[f'{i}'](x)
             x = self._modules[f"{i}_norm"](x)
+            self._handler(f"{i}_norm", x, "")
             x = self.relu(x)
         x = self._modules[f"{self.n_layers}"](x)
         return x

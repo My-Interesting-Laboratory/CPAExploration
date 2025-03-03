@@ -7,28 +7,18 @@ from mpl_toolkits.mplot3d import axes3d
 from polytope import polytope
 
 # COLOR = (
-#     'lightcoral',
-#     'royalblue',
-#     'limegreen',
-#     'gold',
-#     'darkorchid',
-#     'aqua',
-#     'tomato',
-#     'deeppink',
-#     'teal',
+#     "lightcoral",
+#     "royalblue",
+#     "limegreen",
+#     "gold",
+#     "darkorchid",
+#     "aqua",
+#     "tomato",
+#     "deeppink",
+#     "teal",
 # )
 
-COLOR = (
-    '#FA7F6F',
-    '#82B0D2',
-    '#FFBE7A',
-    '#8ECFC9',
-    '#BEB8DC',
-    '#CFEAF1',
-    '#F6CAE5',
-    '#F0988C',
-    '#B883D4',
-)
+COLOR = ("#FA7F6F", "#82B0D2", "#FFBE7A", "#8ECFC9", "#BEB8DC", "#CFEAF1", "#F6CAE5", "#F0988C", "#B883D4")
 
 
 def color(idx: int):
@@ -173,3 +163,58 @@ def _sort_xy(poly: polytope.Polytope) -> np.ndarray:
     angle = angle * corr
     idx = np.argsort(angle)
     return verts[idx, :]
+
+
+class default_plt:
+    def __init__(
+        self,
+        savePath,
+        xlabel="",
+        ylabel="",
+        mode="png",
+        with_gray=False,
+        with_legend=True,
+        with_grid=True,
+    ):
+        self.savePath = savePath
+        self.xlabel = xlabel
+        self.ylabel = ylabel
+        self.mode = mode
+        self.with_gray = with_gray
+        self.with_legend = with_legend
+        self.with_grid = with_grid
+
+    def __enter__(self):
+        fig = plt.figure(0, figsize=(8, 7), dpi=600)
+        self.ax = fig.subplots()
+        self.ax.cla()
+        if not self.with_gray:
+            self.ax.patch.set_facecolor("w")
+        self.ax.tick_params(labelsize=15)
+        self.ax.set_xlabel(self.xlabel, fontdict={"weight": "normal", "size": 15})
+        self.ax.set_ylabel(self.ylabel, fontdict={"weight": "normal", "size": 15})
+        if self.with_grid:
+            self.ax.grid(color="#EAEAEA", linewidth=1)
+        return self.ax
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.with_legend:
+            box = self.ax.get_position()
+            self.ax.set_position([box.x0, box.y0, box.width, box.height * 0.95])
+            self.ax.legend(prop={"weight": "normal", "size": 7}, loc="lower left", bbox_to_anchor=(0, 1.02, 1, 0.2), ncol=3, mode="expand")
+
+        plt.savefig(self.savePath, dpi=600, format=f"{self.mode}")
+        plt.clf()
+        plt.close()
+
+
+def default_subplots(
+    savePath,
+    xlabel="",
+    ylabel="",
+    mode="png",
+    with_gray=False,
+    with_legend=True,
+    with_grid=True,
+):
+    return default_plt(savePath, xlabel, ylabel, mode, with_gray, with_legend, with_grid)

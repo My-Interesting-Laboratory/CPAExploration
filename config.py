@@ -10,13 +10,13 @@ from torchays import nn
 
 
 class COMMON:
-    GPU_ID: int = 0
+    GPU_ID: int = 7
     # random seed
     SEED: int = 5
 
 
 class PATH:
-    TAG: str = "norm"
+    TAG: str = "cpas-batch"
     DIR: str = os.path.join(os.path.abspath("./"), "cache")
     ROOT: str = os.path.join(DIR, TAG) if TAG is not None and len(TAG) > 0 else DIR
 
@@ -24,7 +24,7 @@ class PATH:
 class TOY:
     # All toy datasets
     IN_FEATURES: int = 2
-    N_SAMPLES: int = 1000
+    N_SAMPLES: int = 100
     N_CLASS: int = 2
     BIAS: float = 0
     # Moon
@@ -36,14 +36,14 @@ class MNIST:
 
 
 class TESTNET:
-    NAME: str = "Linear-[32]x3"
-    N_LAYERS = [32, 32, 32]
-    NORM_LAYER = nn.Norm1d
+    NAME: str = "Linear-[64]x3"
+    N_LAYERS = [64] * 3
+    NORM_LAYER = nn.BatchNorm1d
 
 
 class GLOBAL:
     # ["Moon", "GaussianQuantiles", "Random", "Classification", "MNIST"]
-    TYPE: str = "Moon"
+    TYPE: str = "Random"
 
     @classmethod
     def dataset(clz):
@@ -83,8 +83,8 @@ class GLOBAL:
 
 class TRAIN:
     TRAIN: bool = True
-    MAX_EPOCH: int = 1000
-    SAVE_EPOCH: List[int] = [50, 100, 200, 300, 400, 500, 700, 1000]
+    MAX_EPOCH: int = 5000
+    SAVE_EPOCH: List[int] = [100, 500, 1000, 2500, 5000]
     BATCH_SIZE: int = 64
     LR: float = 1e-3
 
@@ -101,9 +101,9 @@ class EXPERIMENT:
     # The depth of the NN to draw
     DEPTH: int = -1
     # The number of the workers
-    WORKERS: int = 32
+    WORKERS: int = 64
     # With best epoch
-    WITH_BEST: bool = False
+    WITH_BEST: bool = True
     # Drawing
     # is drawing the region picture. Only for 2d input.
     WITH_DRAW: bool = True

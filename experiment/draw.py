@@ -56,7 +56,7 @@ class DrawRegionImage:
             ax=ax,
             color=color,
             edgecolor="gray",
-            linewidth=0.2,
+            linewidth=0.1,
             xlim=self.bounds,
             ylim=self.bounds,
         )
