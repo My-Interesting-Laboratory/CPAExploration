@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Any, Dict, List, Tuple
 
@@ -30,9 +31,8 @@ class Handler:
         step_name = f"{epoch}/{step}"
         current_bn_data = dict()
         for layer_name, module in net._modules.items():
-            if "_norm" not in layer_name:
+            if "_norm" not in layer_name or not isinstance(module, nn.modules.batchnorm._BatchNorm):
                 continue
-            # 存储每一个batch下的bn的参数
             module: nn.BatchNorm1d
             parameters: Dict[str, torch.Tensor] = module.state_dict()
             weight = parameters.get("weight").cpu()
@@ -64,14 +64,12 @@ class Handler:
             return
         norm_v = self.norm_neural_value.pop(epoch, dict())
         v_list = norm_v.pop(key, list())
-        v_list.append(value)
+        v_list.append(value.clone().detach().cpu())
         norm_v[key] = v_list
-        norm_v[epoch] = norm_v
+        self.norm_neural_value[epoch] = norm_v
 
     def save(self, name: str = "norm.pkl"):
-        os.makedirs(self.root_dir)
-        self.norm_neural_value
-        self.batch_norm_data
+        os.makedirs(self.root_dir, exist_ok=True)
         save_dict = {
             "norm_values": self.norm_neural_value,
             "data": self.batch_norm_data,
@@ -93,15 +91,58 @@ class Handler:
         if with_data:
             self._statistic_data()
 
+    def _statistic_values(self):
+        # {epoch:{k1:[v1, v2...]}}
+        # 绘制每一层，神经元值的分布图。
+        # 以及平均分布图
+        save_dir = os.path.join(self.root_dir, "values")
+        os.makedirs(save_dir, exist_ok=True)
+        for epoch, kvs in self.norm_neural_value.items():
+            # 先画每个epoch的,所有值的分布图
+            for k, v in kvs.items():
+                save_path = os.path.join(save_dir, f"epoch_{epoch}-{k}.png")
+                # k是每一层
+                # v是这一层每个step的值
+                values, probs = self._values(v)
+                bar_x, bar_y = self._bar(v)
+                with default_subplots(save_path, "value", "log_prob", with_grid=False, with_legend=False) as ax:
+                    # 绘制满足高斯分布概率密度点图
+                    ax.scatter(values, probs, marker="o", c=color(0), alpha=0.4)
+                    # 绘制统计神经元值数量的柱状图
+                    ax2 = ax.twinx()
+                    ax2.set_ylabel("counts", fontdict={"weight": "normal", "size": 15})
+                    ax2.bar(bar_x, bar_y, color=color(1), width=0.15)
+
+    def _values(self, values: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        # 先求这个数据的高斯分布, 然后画出高斯分布后, 根据值计算其概率，绘制概率分布
+        values = torch.cat(values).reshape(-1)
+        std, mean = torch.std_mean(values)
+        gaussian = torch.distributions.Normal(mean, std)
+        probs = gaussian.log_prob(values)
+        return values, probs
+
+    def _bar(self, values: List[torch.Tensor]) -> Tuple[List[int], torch.Tensor]:
+        values = torch.cat(values).reshape(-1)
+        counts: Dict[float, int] = dict()
+        # interval
+        interval = 0.2
+        for v in values:
+            k = math.floor((v / interval + 0.5)) * interval
+            count = counts.get(k, 0) + 1
+            counts[k] = count
+        x = sorted(counts)
+        y = [counts.get(k) for k in x]
+        return x, y
+
     def _statistic_data(self):
-        data = self.batch_norm_data
+        norm_data = self.batch_norm_data
         save_dict: Dict[str, Dict[int, Dict[str, torch.Tensor]] | List[str]] = dict()
-        step_list = list(data.keys())
+        step_list = list(norm_data.keys())
         steps = len(step_list)
         name_list = ["weight", "bias", "running_mean", "running_var", "weight_bn", "bias_bn"]
         for j in range(steps):
             step_name = step_list[j]
-            step_data = data.pop(step_name)
+            step_data = norm_data.pop(step_name)
             for layer_name, layer_data in step_data.items():
                 for name in name_list:
                     data = layer_data.pop(name)
@@ -131,33 +172,10 @@ class Handler:
                         ax.plot(range(len(step_list)), value, label=name, color=color(i))
                         i += 1
 
-    def _statistic_values(self):
-        # {epoch:{k1:[v1, v2...]}}
-        # 绘制每一层，神经元值的分布图。
-        # 以及平均分布图
-        for epoch, kvs in self.norm_neural_value.items():
-            save_dir = os.path.join(self.root_dir, "values")
-            # 先画每个epoch的,所有值的分布图
-            for k, v in kvs.items():
-                save_path = os.path.join(save_dir, f"epoch_{epoch}_{k}.png")
-                # k是每一层
-                # v是这一层每个step的值
-                values, probs = self._values(v)
-                with default_subplots(save_path, "value", "prob", with_grid=False, with_legend=False) as ax:
-                    ax.plot(values, probs, color=color(0))
-
-    def _values(self, values: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-        # 先求这个数据的高斯分布, 然后画出高斯分布后, 根据值计算其概率，绘制概率分布
-        values = torch.cat(values).reshape(-1)
-        std, mean = torch.std_mean(values)
-        gaussian = torch.distributions.Normal(mean, std)
-        probs = gaussian.log_prob(values)
-        return values, probs
-
 
 if __name__ == "__main__":
     dataset = GLOBAL.dataset()
-    handler = Handler(dataset.path)
+    handler = Handler(os.path.join(dataset.path, GLOBAL.NAME))
     main(
         dataset=GLOBAL.dataset(),
         net=proj_net(
@@ -169,4 +187,4 @@ if __name__ == "__main__":
         train_handler=handler.train_handler,
     )
     handler.save("norm.pkl")
-    handler.statistic()
+    handler.statistic(with_data=False)

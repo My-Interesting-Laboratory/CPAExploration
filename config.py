@@ -16,7 +16,7 @@ class COMMON:
 
 
 class PATH:
-    TAG: str = "cpas-batch"
+    TAG: str = "cpas-norm"
     DIR: str = os.path.join(os.path.abspath("./"), "cache")
     ROOT: str = os.path.join(DIR, TAG) if TAG is not None and len(TAG) > 0 else DIR
 
@@ -36,12 +36,12 @@ class MNIST:
 
 
 class TESTNET:
-    NAME: str = "Linear-[64]x3"
     N_LAYERS = [64] * 3
     NORM_LAYER = nn.BatchNorm1d
 
 
 class GLOBAL:
+    NAME: str = "Linear-[64]x3-batch-no_l2"
     # ["Moon", "GaussianQuantiles", "Random", "Classification", "MNIST"]
     TYPE: str = "Random"
 
@@ -72,7 +72,7 @@ class GLOBAL:
                 model = TestNetLinear(
                     in_features=TOY.IN_FEATURES,
                     layers=TESTNET.N_LAYERS,
-                    name=TESTNET.NAME,
+                    name=clz.NAME,
                     n_classes=n_classes,
                     norm_layer=TESTNET.NORM_LAYER,
                 )
@@ -83,8 +83,8 @@ class GLOBAL:
 
 class TRAIN:
     TRAIN: bool = True
-    MAX_EPOCH: int = 5000
-    SAVE_EPOCH: List[int] = [100, 500, 1000, 2500, 5000]
+    MAX_EPOCH: int = 10000
+    SAVE_EPOCH: List[int] = [100, 500, 1000, 2500, 5000, 10000]
     BATCH_SIZE: int = 64
     LR: float = 1e-3
 
@@ -94,7 +94,7 @@ class EXPERIMENT:
     EXPERIMENT: bool = True
     # Project, "None"
     PROJ_DIM: Tuple[int] | None = None
-    # The values of projection
+    # The values of projection including "PROJ_DIM" which is useless.
     PROJ_VALUES: torch.Tensor = torch.zeros((1, 28, 28)) + 0.5
     # Bound for find cpa
     BOUND: Tuple[int] = (-1, 1)
@@ -103,7 +103,7 @@ class EXPERIMENT:
     # The number of the workers
     WORKERS: int = 64
     # With best epoch
-    WITH_BEST: bool = True
+    WITH_BEST: bool = False
     # Drawing
     # is drawing the region picture. Only for 2d input.
     WITH_DRAW: bool = True
@@ -118,4 +118,4 @@ class ANALYSIS:
     # Analysis
     WITH_ANALYSIS: bool = False
     # draw the dataset distribution
-    WITH_DATASET: bool = False
+    WITH_DATASET: bool = True

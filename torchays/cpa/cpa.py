@@ -112,11 +112,14 @@ class CPA:
         cpa_set.register(cpa)
         # Start to get point region.
         self.logger.info("Start Get point cpa.")
-        point_cpa = self._get_point_cpa(net, cpa_set, cpa_handler)
+        point_cpa, neural_funcs = self._get_point_cpa(net, cpa_set, cpa_handler)
         self.logger.info(f"End Get point cpa.")
-        return point_cpa.funcs, point_cpa.region, point_cpa.point
+        # funcs: affine functions which constructs the region.
+        # region: define weather the funcs > 0
+        # neural_funcs: all neural functions in the parent region.
+        return point_cpa.funcs, point_cpa.region, neural_funcs
 
-    def _get_point_cpa(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> CPAFunc:
+    def _get_point_cpa(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> Tuple[CPAFunc, torch.Tensor]:
         cpa_cache = cpa_handler.cpa_caches()
         for p_cpa in cpa_set:
             # Get hyperplanes.
@@ -130,11 +133,11 @@ class CPA:
                 # Check and get the child region. Then, the neighbor regions will be found.
                 c_cpa, _, _ = self._optimize_child_region(p_cpa, intersect_funcs, c_region)
                 if c_cpa is None:
-                    return None
-                # Use the input point to the inner point of region.
+                    return None, None
+                # Use the input point to replace the inner point of region.
                 c_cpa.point = p_cpa.point
                 self._nn_region_counts(c_cpa, cpa_set.register, cpa_cache.cpa)
-        return c_cpa
+        return c_cpa, c_funcs
 
     @log_time("CPAFunc counts")
     def _get_counts(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> int:

@@ -41,19 +41,14 @@ class _base:
         self.training = True
         self.root_dir = None
 
-    def get_root(self):
-        if self.root_dir is None:
-            self.root_dir = os.path.join(self.save_dir, self.net(0, False).name)
-        return self.root_dir
-
     def _init_model(self):
         dataset, n_classes = self.dataset()
         net = self.net(n_classes, self.training).to(self.device)
         self._init_dir(net.name)
         return net, dataset, n_classes
 
-    def _init_dir(self, tag):
-        self.root_dir = os.path.join(self.save_dir, tag)
+    def _init_dir(self, name: str):
+        self.root_dir = os.path.join(self.save_dir, name)
         self.model_dir = os.path.join(self.root_dir, "model")
         self.experiment_dir = os.path.join(self.root_dir, "experiment")
         for dir in [
@@ -109,7 +104,7 @@ class Train(_base):
         train_loader = data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         total_step = math.ceil(len(dataset) / self.batch_size)
 
-        optim = torch.optim.Adam(net.parameters(), lr=self.lr, weight_decay=1e-4, betas=[0.9, 0.999])
+        optim = torch.optim.Adam(net.parameters(), lr=self.lr, weight_decay=0, betas=[0.9, 0.999])
         ce = torch.nn.CrossEntropyLoss()
 
         save_step = [v for v in self.save_epoch if v < 1]
@@ -256,10 +251,7 @@ class CPAs(_base):
                 torch.save(data_dict, os.path.join(save_dir, "net_regions.pkl"))
                 result = {"regions": count, "accuracy": f"{acc:.4f}"}
                 with open(os.path.join(save_dir, "results.json"), "w") as w:
-                    json.dump(
-                        result,
-                        w,
-                    )
+                    json.dump(result, w)
 
 
 class Experiment(_base):

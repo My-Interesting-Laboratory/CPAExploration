@@ -58,7 +58,7 @@ class Analysis:
         dataset = torch.load(dataset_path, weights_only=False)
         save_path = os.path.join(self.root_dir, "distribution.png")
         x, y, n_classes = dataset['data'], dataset['classes'], dataset['n_classes']
-        with default_subplots(save_path, 'x1', 'x2', isLegend=False, isGrid=False) as ax:
+        with default_subplots(save_path, 'x1', 'x2', with_legend=False, with_grid=False) as ax:
             for i in range(n_classes):
                 ax.scatter(x[y == i, 0], x[y == i, 1], color=color(i))
 

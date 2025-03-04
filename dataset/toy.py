@@ -38,11 +38,11 @@ class Toy(Dataset):
     def __init__(
         self,
         type: str,
-        path: str,
+        root: str,
         n_samples: int = 1000,
         bias: float = 0,
     ):
-        super().__init__(type, path)
+        super().__init__(type, root)
         self.n_samples = n_samples
         self.bias = bias
         self.seed: str = np.random.get_state()[1][0]

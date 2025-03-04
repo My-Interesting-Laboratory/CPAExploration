@@ -25,13 +25,22 @@ def vertify(x: torch.Tensor, functions: torch.Tensor, region: torch.Tensor) -> b
     return -1 not in region * point
 
 
-def find_projection(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
-    # Find a point on the hyperplane that passes through x and is perpendicular to the hyperplane.
+def _distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
     # x: [d]
     # hyperplane: [n, d+1] (w: [n, d], b: [n])
     W, B = hyperplanes[:, :-1], hyperplanes[:, -1]
-    # d: [n]
-    d = (x @ W.T + B) / torch.sum(torch.square(W), dim=1)
+    # return: [n]
+    return (x @ W.T + B) / torch.sum(torch.square(W), dim=1), W
+
+
+def distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
+    d, _ = _distance(x, hyperplanes)
+    return d
+
+
+def find_projection(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
+    # Find a point on the hyperplane that passes through x and is perpendicular to the hyperplane.
+    d, W = _distance(x, hyperplanes)
     # p_point: [n, d]
     p_point = x - W * d.view(-1, 1)
     return p_point

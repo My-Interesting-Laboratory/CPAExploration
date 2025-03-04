@@ -53,22 +53,22 @@ def main(
     save_dir = dataset.path
     os.makedirs(save_dir, exist_ok=True)
     device = torch.device('cuda', COMMON.GPU_ID) if torch.cuda.is_available() else torch.device('cpu')
-    if EXPERIMENT.EXPERIMENT:
-        exp = Experiment(
-            save_dir=save_dir,
-            net=net,
-            dataset=dataset.make_dataset,
-            init_fun=init_fun(COMMON.SEED),
-            save_epoch=TRAIN.SAVE_EPOCH,
-            device=device,
+    exp = Experiment(
+        save_dir=save_dir,
+        net=net,
+        dataset=dataset.make_dataset,
+        init_fun=init_fun(COMMON.SEED),
+        save_epoch=TRAIN.SAVE_EPOCH,
+        device=device,
+    )
+    if TRAIN.TRAIN:
+        exp.train(
+            max_epoch=TRAIN.MAX_EPOCH,
+            batch_size=TRAIN.BATCH_SIZE,
+            lr=TRAIN.LR,
+            train_handler=train_handler,
         )
-        if TRAIN.TRAIN:
-            exp.train(
-                max_epoch=TRAIN.MAX_EPOCH,
-                batch_size=TRAIN.BATCH_SIZE,
-                lr=TRAIN.LR,
-                train_handler=train_handler,
-            )
+    if EXPERIMENT.EXPERIMENT:
         exp.cpas(
             workers=EXPERIMENT.WORKERS,
             best_epoch=EXPERIMENT.WITH_BEST,
@@ -79,7 +79,7 @@ def main(
             is_draw_hpas=EXPERIMENT.WITH_DRAW_HPAS,
             is_statistic_hpas=EXPERIMENT.WITH_STATISTIC_HPAS,
         )
-        exp()
+    exp()
     if ANALYSIS.WITH_ANALYSIS:
         analysis = Analysis(
             root_dir=save_dir,
