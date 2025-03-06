@@ -4,11 +4,12 @@ from typing import Callable
 import numpy as np
 import torch
 
-from config import ANALYSIS, COMMON, EXPERIMENT, GLOBAL, TRAIN
-from dataset import Dataset
+from config import ANALYSIS, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TOY, TRAIN, TESTNET
+from dataset import Classification, Dataset, GaussianQuantiles, Mnist, Moon, Random
 from experiment import Analysis, Experiment
 from torchays import nn
 from torchays.cpa import Model, ProjectWrapper
+from torchays.models import LeNet, TestNetLinear
 
 
 def init_fun(seed: int = 0):
@@ -43,6 +44,42 @@ def proj_net(
     return wrapper
 
 
+def dataset():
+    root: str = os.path.join(PATH.DIR, PATH.TAG) if PATH.TAG is not None and len(PATH.TAG) > 0 else PATH.DIR
+    dataset = None
+    if GLOBAL.TYPE == "Moon":
+        dataset = Moon(root=root, n_samples=TOY.N_SAMPLES, noise=TOY.NOISE, random_state=COMMON.SEED, bias=TOY.BIAS)
+    if GLOBAL.TYPE == "GaussianQuantiles":
+        dataset = GaussianQuantiles(root=root, n_samples=TOY.N_SAMPLES, n_classes=TOY.N_CLASS, bias=TOY.BIAS, random_state=COMMON.SEED)
+    if GLOBAL.TYPE == "Random":
+        dataset = Random(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, random_state=COMMON.SEED, bias=TOY.BIAS)
+    if GLOBAL.TYPE == "Classification":
+        dataset = Classification(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, n_classes=TOY.N_CLASS, bias=TOY.BIAS, random_state=COMMON.SEED)
+    if GLOBAL.TYPE == "MNIST":
+        dataset = Mnist(root, MNIST.DOWNLOAD)
+    return dataset
+
+
+def net():
+
+    def wrapper(n_classes: int) -> Model:
+        if GLOBAL.TYPE == "MNIST":
+            # LeNet
+            model = LeNet()
+        else:
+            # Toy
+            model = TestNetLinear(
+                in_features=TOY.IN_FEATURES,
+                layers=TESTNET.N_LAYERS,
+                name=GLOBAL.NAME,
+                n_classes=n_classes,
+                norm_layer=TESTNET.NORM_LAYER,
+            )
+        return model
+
+    return wrapper
+
+
 def main(
     *,
     dataset: Dataset,
@@ -68,7 +105,7 @@ def main(
             lr=TRAIN.LR,
             train_handler=train_handler,
         )
-    if EXPERIMENT.EXPERIMENT:
+    if EXPERIMENT.CPAS:
         exp.cpas(
             workers=EXPERIMENT.WORKERS,
             best_epoch=EXPERIMENT.WITH_BEST,
@@ -79,7 +116,15 @@ def main(
             is_draw_hpas=EXPERIMENT.WITH_DRAW_HPAS,
             is_statistic_hpas=EXPERIMENT.WITH_STATISTIC_HPAS,
         )
-    exp()
+    if EXPERIMENT.POINT:
+        exp.points(
+            best_epoch=EXPERIMENT.WITH_BEST,
+            bounds=EXPERIMENT.BOUND,
+            depth=EXPERIMENT.DEPTH,
+        )
+    # run
+    exp.run()
+
     if ANALYSIS.WITH_ANALYSIS:
         analysis = Analysis(
             root_dir=save_dir,
@@ -90,9 +135,9 @@ def main(
 
 if __name__ == "__main__":
     main(
-        dataset=GLOBAL.dataset(),
+        dataset=dataset(),
         net=proj_net(
-            GLOBAL.net(),
+            net(),
             proj_dims=EXPERIMENT.PROJ_DIM,
             proj_values=EXPERIMENT.PROJ_VALUES,
         ),

@@ -1,13 +1,12 @@
-import math
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 
-from config import EXPERIMENT, GLOBAL, TRAIN
-from main import main, proj_net
+from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TRAIN
+from main import dataset, main, net, proj_net
 from torchays import nn
-from torchays.graph import color, default_subplots
+from torchays.graph import bar, color, default_subplots
 
 
 class Handler:
@@ -104,7 +103,7 @@ class Handler:
                 # k是每一层
                 # v是这一层每个step的值
                 values, probs = self._values(v)
-                bar_x, bar_y = self._bar(v)
+                bar_x, bar_y = bar(v, 0.2)
                 with default_subplots(save_path, "value", "log_prob", with_grid=False, with_legend=False) as ax:
                     # 绘制满足高斯分布概率密度点图
                     ax.scatter(values, probs, marker="o", c=color(0), alpha=0.4)
@@ -120,19 +119,6 @@ class Handler:
         gaussian = torch.distributions.Normal(mean, std)
         probs = gaussian.log_prob(values)
         return values, probs
-
-    def _bar(self, values: List[torch.Tensor]) -> Tuple[List[int], torch.Tensor]:
-        values = torch.cat(values).reshape(-1)
-        counts: Dict[float, int] = dict()
-        # interval
-        interval = 0.2
-        for v in values:
-            k = math.floor((v / interval + 0.5)) * interval
-            count = counts.get(k, 0) + 1
-            counts[k] = count
-        x = sorted(counts)
-        y = [counts.get(k) for k in x]
-        return x, y
 
     def _statistic_data(self):
         norm_data = self.batch_norm_data
@@ -173,18 +159,51 @@ class Handler:
                         i += 1
 
 
-if __name__ == "__main__":
-    dataset = GLOBAL.dataset()
-    handler = Handler(os.path.join(dataset.path, GLOBAL.NAME))
+def set_config(
+    name: str,
+    norm_layer,
+):
+    GLOBAL.NAME = name
+    TESTNET.NORM_LAYER = norm_layer
+
+
+def config():
+    PATH.TAG = "cpas-norm"
+
+    TRAIN.TRAIN = True
+
+    TESTNET.N_LAYERS = [64] * 3
+
+    EXPERIMENT.CPAS = True
+    EXPERIMENT.POINT = True
+    EXPERIMENT.WORKERS = 64
+
+
+def run():
+    config()
+    data = dataset()
+    handler = Handler(os.path.join(data.path, GLOBAL.NAME))
     main(
-        dataset=GLOBAL.dataset(),
+        dataset=data,
         net=proj_net(
-            GLOBAL.net(),
+            net(),
             proj_dims=EXPERIMENT.PROJ_DIM,
             proj_values=EXPERIMENT.PROJ_VALUES,
             handler=handler.net_handler,
         ),
         train_handler=handler.train_handler,
     )
-    handler.save("norm.pkl")
-    handler.statistic(with_data=False)
+    # handler.save("norm.pkl")
+    # handler.statistic("norm.pkl", with_data=False)
+
+
+if __name__ == "__main__":
+    configs = [
+        ("Linear-[64]x3-norm", nn.Norm1d),
+        ("Linear-[64]x3-batch", nn.BatchNorm1d),
+    ]
+    for args in configs:
+        set_config(*args)
+        print(f"-------- Now: {GLOBAL.NAME} ---------")
+        run()
+        print(f"-------- End: {GLOBAL.NAME} ---------\n")

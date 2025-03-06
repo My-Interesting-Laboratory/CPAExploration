@@ -1,5 +1,5 @@
 import os
-from typing import Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import numpy as np
 import torch
@@ -41,11 +41,12 @@ class Toy(Dataset):
         root: str,
         n_samples: int = 1000,
         bias: float = 0,
+        random_state: Any = 5,
     ):
         super().__init__(type, root)
         self.n_samples = n_samples
         self.bias = bias
-        self.seed: str = np.random.get_state()[1][0]
+        self.seed: str = random_state
 
     def make_data(self) -> Tuple[np.ndarray, np.ndarray, int]:
         raise NotImplementedError()
@@ -102,7 +103,7 @@ class Moon(Toy):
         bias: int = 0,
         norm_func: Callable[[np.ndarray], np.ndarray] = _norm,
     ):
-        super().__init__("moon", root, n_samples, bias)
+        super().__init__("moon", root, n_samples, bias, random_state)
         self.noise = noise
         self.random_state = random_state
         self.norm_func = norm_func
@@ -132,7 +133,7 @@ class GaussianQuantiles(Toy):
         bias: int = 0,
         norm_func: Callable[[np.ndarray], np.ndarray] = _norm,
     ):
-        super().__init__("gaussian_quantiles", root, n_samples, bias)
+        super().__init__("gaussian_quantiles", root, n_samples, bias, random_state)
         self.mean = mean
         self.cov = cov
         self.n_features = n_features
@@ -167,12 +168,14 @@ class Random(Toy):
         *,
         n_samples: int = 1000,
         in_features: int = 2,
+        random_state: int | None = None,
         bias: float = 0,
     ):
-        super().__init__("random", root, n_samples, bias)
+        super().__init__("random", root, n_samples, bias, random_state)
         self.in_features = in_features
 
     def make_data(self):
+        np.random.seed(self.seed)
         data = np.random.uniform(-1, 1, (self.n_samples, self.in_features))
         classes = np.sign(np.random.uniform(-1, 1, [self.n_samples]))
         classes = np.where(classes > 0, 1, 0)
@@ -194,7 +197,7 @@ class Classification(Toy):
         random_state: int | None = None,
         norm_func: Callable[[np.ndarray], np.ndarray] = _norm,
     ):
-        super().__init__("classification", root, n_samples, bias)
+        super().__init__("classification", root, n_samples, bias, random_state)
         self.in_features = in_features
         self.n_classes = n_classes
         self.random_state = random_state

@@ -98,7 +98,7 @@ class CPA:
         self,
         net: Model,
         point: torch.Tensor,
-        cpa_handler: CPACache,
+        cpa_handler: CPAHandler,
         *,
         bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -120,14 +120,14 @@ class CPA:
         return point_cpa.funcs, point_cpa.region, neural_funcs
 
     def _get_point_cpa(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> Tuple[CPAFunc, torch.Tensor]:
-        cpa_cache = cpa_handler.cpa_caches()
         for p_cpa in cpa_set:
+            cpa_cache = cpa_handler.cpa_caches()
             # Get hyperplanes.
             c_funcs = self._functions(net, p_cpa.point, p_cpa.depth)
             intersect_funcs = self._find_intersect(p_cpa, c_funcs)
             if intersect_funcs is None:
                 c_cpa = CPAFunc(p_cpa.funcs, p_cpa.region, p_cpa.point, p_cpa.depth + 1)
-                self._nn_region_counts(c_region, cpa_set.register, cpa_cache.cpa)
+                self._nn_region_counts(c_cpa, cpa_set.register, cpa_cache.cpa)
             else:
                 c_region = get_regions(p_cpa.point.reshape(1, -1), intersect_funcs)[0]
                 # Check and get the child region. Then, the neighbor regions will be found.
@@ -137,6 +137,10 @@ class CPA:
                 # Use the input point to replace the inner point of region.
                 c_cpa.point = p_cpa.point
                 self._nn_region_counts(c_cpa, cpa_set.register, cpa_cache.cpa)
+            # Collect the information of the current parent region including region functions, child functions, intersect functions and number of the child regions.
+            cpa_cache.hyperplane(p_cpa, c_funcs, intersect_funcs, 1)
+            cpa_handler.extend(cpa_cache)
+        cpa_handler()
         return c_cpa, c_funcs
 
     @log_time("CPAFunc counts")

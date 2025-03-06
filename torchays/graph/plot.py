@@ -1,8 +1,10 @@
-from typing import Any, Callable, List, Tuple
+import math
+from typing import Any, Callable, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
+import torch
 from mpl_toolkits.mplot3d import axes3d
 from polytope import polytope
 
@@ -195,14 +197,13 @@ class default_plt:
         self.ax.set_ylabel(self.ylabel, fontdict={"weight": "normal", "size": 15})
         if self.with_grid:
             self.ax.grid(color="#EAEAEA", linewidth=1)
-        return self.ax
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
         if self.with_legend:
             box = self.ax.get_position()
             self.ax.set_position([box.x0, box.y0, box.width, box.height * 0.95])
             self.ax.legend(prop={"weight": "normal", "size": 7}, loc="lower left", bbox_to_anchor=(0, 1.02, 1, 0.2), ncol=3, mode="expand")
+        return self.ax
 
+    def __exit__(self, exc_type, exc_val, exc_tb):
         plt.savefig(self.savePath, dpi=600, format=f"{self.mode}")
         plt.clf()
         plt.close()
@@ -218,3 +219,19 @@ def default_subplots(
     with_grid=True,
 ):
     return default_plt(savePath, xlabel, ylabel, mode, with_gray, with_legend, with_grid)
+
+
+def bar(
+    values: List[torch.Tensor],
+    interval: float = 0.2,
+) -> Tuple[List[float], List[int]]:
+    values = torch.cat(values).reshape(-1)
+    counts: Dict[float, int] = dict()
+    # interval
+    for v in values:
+        k = math.floor((v / interval + 0.5)) * interval
+        count = counts.pop(k, 0) + 1
+        counts[k] = count
+    x = sorted(counts)
+    y = [counts.get(k) for k in x]
+    return x, y

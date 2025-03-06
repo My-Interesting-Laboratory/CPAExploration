@@ -2,19 +2,21 @@ import json
 import math
 import os
 from copy import deepcopy
-from typing import Any, Callable, List, Tuple
+from cProfile import label
+from typing import Any, Callable, Dict, List, Tuple
 
 import torch
 from torch.utils import data
 
 from dataset import Dataset
 from torchays import nn
-from torchays.cpa import CPA, Model
+from torchays.cpa import CPA, Model, distance
+from torchays.graph import bar, color, default_subplots
 from torchays.utils import get_logger
 
 from .draw import DrawRegionImage
 from .handler import Handler
-from .hpa import HyperplaneArrangements
+from .hpa import HyperplaneArrangement, HyperplaneArrangements
 
 
 def accuracy(x, classes):
@@ -30,7 +32,7 @@ class _base:
         *,
         net: Callable[[int, bool], Model] = None,
         dataset: Callable[..., Tuple[Dataset, int]] = None,
-        save_epoch: List[int] = [0, 0.1, 0.5, 1, 2, 4, 6, 8, 10, 15, 20, 30, 50, 80, 100],
+        save_epoch: List[int] = [100],
         device: torch.device = torch.device('cpu'),
     ) -> None:
         self.save_dir = save_dir
@@ -80,7 +82,7 @@ class Train(_base):
         net: Callable[[int, bool], Model],
         dataset: Callable[..., Tuple[Dataset, int]],
         *,
-        save_epoch: List[int] = [0, 0.1, 0.5, 1, 2, 4, 6, 8, 10, 15, 20, 30, 50, 80, 100],
+        save_epoch: List[int] = [100],
         max_epoch: int = 100,
         batch_size: int = 32,
         lr: float = 0.001,
@@ -148,7 +150,47 @@ class Train(_base):
         print(f'Best_Epoch: {best_epoch+1} / {self.max_epoch}, Accuracy: {best_acc:.4f}')
 
 
-class CPAs(_base):
+class _cpa(_base):
+    def __init__(
+        self,
+        save_dir: str,
+        net: Callable[[int, bool], Model],
+        dataset: Callable[..., Tuple[Dataset, int]],
+        *,
+        save_epoch: List[int] = [100],
+        best_epoch: bool = False,
+        bounds: Tuple[float] = (-1, 1),
+        depth: int = -1,
+        device: torch.device = torch.device('cpu'),
+    ) -> None:
+        super().__init__(
+            save_dir,
+            net=net,
+            dataset=dataset,
+            save_epoch=save_epoch,
+            device=device,
+        )
+        self.training = False
+        self.bounds = bounds
+        self.best_epoch = best_epoch
+        self.depth = depth
+
+    def _is_continue(self, model_name: str):
+        epoch = float(model_name.split("_")[-1][:-4])
+        if epoch in self.save_epoch:
+            return False
+        if self.best_epoch and "best" in model_name:
+            return False
+        return True
+
+    def input_size(self, net: Model, dataset: Dataset) -> Tuple[int] | torch.Size:
+        try:
+            return net.input_size
+        except:
+            return dataset.input_size
+
+
+class CPAs(_cpa):
     def __init__(
         self,
         save_dir: str,
@@ -165,24 +207,23 @@ class CPAs(_base):
         is_draw_hpas: bool = False,
         is_statistic_hpas: bool = True,
         device: torch.device = torch.device('cpu'),
-    ) -> None:
+    ):
         super().__init__(
             save_dir,
-            net=net,
-            dataset=dataset,
+            net,
+            dataset,
             save_epoch=save_epoch,
+            best_epoch=best_epoch,
+            bounds=bounds,
+            depth=depth,
             device=device,
         )
-        self.training = False
         self.workers, self.multi = self._works(workers)
-        self.bounds = bounds
         self.is_draw = is_draw
         self.is_draw_3d = is_draw_3d
         self.is_draw_hpas = is_draw_hpas
         self.is_statistic_hpas = is_statistic_hpas
         self.is_hpas = is_draw_hpas or is_statistic_hpas
-        self.best_epoch = best_epoch
-        self.depth = depth
 
     def _works(self, workers: int):
         workers = math.ceil(workers)
@@ -190,18 +231,11 @@ class CPAs(_base):
             return 1, False
         return workers, True
 
-    def _is_continue(self, model_name: str):
-        epoch = float(model_name.split("_")[-1][:-4])
-        if epoch in self.save_epoch:
-            return False
-        if self.best_epoch and "best" in model_name:
-            return False
-        return True
-
     def run(self):
         net, dataset, n_classes = self._init_model()
         depth = self.depth if self.depth >= 0 else net.n_relu
         val_dataloader = data.DataLoader(dataset, shuffle=True, pin_memory=True)
+        input_size = self.input_size(net, dataset)
         cpa = CPA(device=self.device, workers=self.workers)
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
@@ -220,10 +254,6 @@ class CPAs(_base):
                     os.path.join(save_dir, "region.log"),
                     multi=self.multi,
                 )
-                try:
-                    input_size = net.input_size
-                except:
-                    input_size = dataset.input_size
                 count = cpa.start(
                     net,
                     bounds=self.bounds,
@@ -254,15 +284,117 @@ class CPAs(_base):
                     json.dump(result, w)
 
 
+class _distance:
+    neural_ds: List[torch.Tensor]
+    inter_ds: List[torch.Tensor]
+
+    def __init__(self):
+        self.inter_ds = list()
+        self.neural_ds = list()
+
+    def append(self, neural_ds: torch.Tensor = None, inter_ds: torch.Tensor = None):
+        if neural_ds is not None:
+            self.neural_ds.append(neural_ds)
+        if inter_ds is not None:
+            self.inter_ds.append(inter_ds)
+        return self
+
+
+class Points(_cpa):
+
+    def __init__(
+        self,
+        save_dir: str,
+        *,
+        net: Callable[[int, bool], Model],
+        dataset: Callable[..., Tuple[Dataset, int]],
+        bounds: Tuple[float] = (-1, 1),
+        depth: int = -1,
+        save_epoch: List[int] = [100],
+        best_epoch: bool = False,
+        device=torch.device('cpu'),
+    ):
+        super().__init__(
+            save_dir,
+            net,
+            dataset,
+            save_epoch=save_epoch,
+            best_epoch=best_epoch,
+            bounds=bounds,
+            depth=depth,
+            device=device,
+        )
+
+    def run(self):
+        net, dataset, _ = self._init_model()
+        depth = self.depth if self.depth >= 0 else net.n_relu
+        dataloader = data.DataLoader(dataset, shuffle=True, pin_memory=True)
+        input_size = self.input_size(net, dataset)
+        cpa = CPA(device=self.device)
+        model_list = os.listdir(self.model_dir)
+        with torch.no_grad():
+            # 在不同epoch下
+            for model_name in model_list:
+                if self._is_continue(model_name):
+                    continue
+                print(f"Solve fileName: {model_name} ....")
+                save_dir = os.path.join(self.experiment_dir, os.path.splitext(model_name)[0])
+                os.makedirs(save_dir, exist_ok=True)
+                net.load_state_dict(torch.load(os.path.join(self.model_dir, model_name), weights_only=False))
+                logger = get_logger(f"region-{os.path.splitext(model_name)[0]}", os.path.join(save_dir, "points.log"))
+                # 获取每个数据，在当前父区域下超平面的距离
+                values: Dict[int, _distance] = dict()
+                for point, _ in dataloader:
+                    point: torch.Tensor = point[0].float()
+                    handler = Handler()
+                    cpa.start(
+                        net,
+                        point,
+                        bounds=self.bounds,
+                        input_size=input_size,
+                        depth=depth,
+                        handler=handler,
+                        logger=logger,
+                    )
+                    values = self._handler_hpas(values, point, handler.hyperplane_arrangements)
+                draw_dir = os.path.join(save_dir, f"distance-count")
+                os.makedirs(draw_dir, exist_ok=True)
+                for depth, value in values.items():
+                    save_path = os.path.join(draw_dir, f"distance-{depth}.png")
+                    nd_x, nd_y = bar(value.neural_ds, 0.2)
+                    id_x, id_y = bar(value.inter_ds, 0.2)
+                    with default_subplots(save_path, "value", "count", with_grid=False, with_legend=False) as ax:
+                        ax.set_xlim(-10, 10)
+                        ax.set_ylim(0, sum(nd_y))
+                        ax.bar(nd_x, nd_y, color=color(1), width=0.15, label=f"All Neurons: {sum(nd_y)}")
+                        ax.bar(id_x, id_y, color=color(0), width=0.15, label=f"Intersect Neurons: {sum(id_y)}")
+                        ax.legend(prop={"weight": "normal", "size": 7})
+
+    def _handler_hpas(
+        self,
+        values: Dict[int, _distance],
+        point: torch.Tensor,
+        hpas: Dict[int, List[HyperplaneArrangement]],
+    ):
+        for depth, hpa in hpas.items():
+            hpa = hpa.pop()
+            nerual_ds = distance(point, hpa.c_funs)
+            inter_ds = None
+            if hpa.intersect_funs is not None:
+                inter_ds = distance(point, hpa.intersect_funs)
+            values[depth] = values.pop(depth, _distance()).append(nerual_ds, inter_ds)
+        return values
+
+
 class Experiment(_base):
     def __init__(
         self,
-        net: Callable[[int, bool], Model],
-        dataset: Callable[..., Tuple[Dataset, int]],
         save_dir: str,
         init_fun: Callable[..., None],
         *,
-        save_epoch: List[int] = [0, 0.1, 0.5, 1, 2, 4, 6, 8, 10, 15, 20, 30, 50, 80, 100],
+        net: Callable[[int, bool], Model],
+        dataset: Callable[..., Tuple[Dataset, int]],
+        save_epoch: List[int] = [100],
         device: torch.device = torch.device('cpu'),
     ) -> None:
         super().__init__(
@@ -323,6 +455,24 @@ class Experiment(_base):
             device=self.device,
         )
         self.append(cpas.run)
+
+    def points(
+        self,
+        best_epoch: bool = False,
+        bounds: Tuple[float] = (-1, 1),
+        depth: int = -1,
+    ):
+        points = Points(
+            save_dir=self.save_dir,
+            net=self.net,
+            dataset=self.dataset,
+            save_epoch=self.save_epoch,
+            best_epoch=best_epoch,
+            bounds=bounds,
+            depth=depth,
+            device=self.device,
+        )
+        self.append(points.run)
 
     def append(self, fun: Callable[..., None]):
         self.runs.append(self.init_fun)

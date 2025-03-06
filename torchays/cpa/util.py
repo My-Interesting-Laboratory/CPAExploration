@@ -20,7 +20,9 @@ def get_regions(x: torch.Tensor, functions: torch.Tensor) -> torch.Tensor:
 
 
 def vertify(x: torch.Tensor, functions: torch.Tensor, region: torch.Tensor) -> bool:
-    # Verify that the current point x is in the region
+    """
+    Verify that the current point x is in the region
+    """
     point = _get_regions(x, functions)
     return -1 not in region * point
 
@@ -30,7 +32,7 @@ def _distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
     # hyperplane: [n, d+1] (w: [n, d], b: [n])
     W, B = hyperplanes[:, :-1], hyperplanes[:, -1]
     # return: [n]
-    return (x @ W.T + B) / torch.sum(torch.square(W), dim=1), W
+    return (x @ W.T + B) / (torch.sum(torch.square(W), dim=1) + 1e-10), W
 
 
 def distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
@@ -39,7 +41,9 @@ def distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
 
 
 def find_projection(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
-    # Find a point on the hyperplane that passes through x and is perpendicular to the hyperplane.
+    """
+    Find a point on the hyperplane that passes through x and is perpendicular to the hyperplane.
+    """
     d, W = _distance(x, hyperplanes)
     # p_point: [n, d]
     p_point = x - W * d.view(-1, 1)

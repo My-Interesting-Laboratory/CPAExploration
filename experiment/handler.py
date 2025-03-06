@@ -28,6 +28,7 @@ class Handler(BaseHandler):
         self.points.append(point.cpu().numpy())
 
     def _init_inner_hyperplanes(self):
+        # {depth: [HyperplaneArrangement,]}
         self.hyperplane_arrangements: Dict[int, List[HyperplaneArrangement]] = dict()
         return self
 
@@ -40,8 +41,7 @@ class Handler(BaseHandler):
         n_regions: int,
         depth: int,
     ) -> None:
+        depth_hp_arrs = self.hyperplane_arrangements.pop(depth, list())
         hp_arr = HyperplaneArrangement(p_funs, p_regions, c_funs, intersect_funs, n_regions, depth)
-        depth_hp_arrs = self.hyperplane_arrangements.get(depth, list())
         depth_hp_arrs.append(hp_arr)
         self.hyperplane_arrangements[depth] = depth_hp_arrs
-        return
