@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 
 import torch
 
-from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TRAIN
+from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
 from main import dataset, main, net, proj_net
 from torchays import nn
 from torchays.graph import bar, color, default_subplots
@@ -170,9 +170,11 @@ def set_config(
 def config():
     PATH.TAG = "cpas-norm"
 
+    TOY.N_SAMPLES = 1000
+
     TRAIN.TRAIN = True
 
-    TESTNET.N_LAYERS = [64] * 3
+    TESTNET.N_LAYERS = [64] * 5
 
     EXPERIMENT.CPAS = True
     EXPERIMENT.POINT = True
@@ -180,7 +182,6 @@ def config():
 
 
 def run():
-    config()
     data = dataset()
     handler = Handler(os.path.join(data.path, GLOBAL.NAME))
     main(
@@ -193,16 +194,18 @@ def run():
         ),
         train_handler=handler.train_handler,
     )
-    # handler.save("norm.pkl")
+    if TRAIN.TRAIN:
+        handler.save("norm.pkl")
     # handler.statistic("norm.pkl", with_data=False)
 
 
 if __name__ == "__main__":
     configs = [
-        ("Linear-[64]x3-norm", nn.Norm1d),
-        ("Linear-[64]x3-batch", nn.BatchNorm1d),
+        ("Linear-[64]x5-norm", nn.Norm1d),
+        ("Linear-[64]x5-batch", nn.BatchNorm1d),
     ]
     for args in configs:
+        config()
         set_config(*args)
         print(f"-------- Now: {GLOBAL.NAME} ---------")
         run()

@@ -4,7 +4,7 @@ from typing import Callable
 import numpy as np
 import torch
 
-from config import ANALYSIS, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TOY, TRAIN, TESTNET
+from config import ANALYSIS, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TESTNET, TOY, TRAIN
 from dataset import Classification, Dataset, GaussianQuantiles, Mnist, Moon, Random
 from experiment import Analysis, Experiment
 from torchays import nn
@@ -80,6 +80,23 @@ def net():
     return wrapper
 
 
+def print_cfg():
+    print("Configuration:")
+    print(f"Name: {GLOBAL.NAME}")
+    print(f"Random Seed: {COMMON.SEED}")
+    print(f"Dataset: {GLOBAL.TYPE}")
+    if GLOBAL.TYPE == "MNIST":
+        print(f"Net: LeNet")
+    else:
+        print(f"|   n_samples: {TOY.N_SAMPLES}")
+        print(f"|   n_class: {TOY.N_CLASS}")
+        print(f"|   in_feature: {TOY.IN_FEATURES}")
+        print(f"Net: TestNetLinear")
+        print(f"|   Layers: {TESTNET.N_LAYERS}")
+        print(f"|   Norm Layer: {TESTNET.NORM_LAYER.__name__}")
+        print()
+
+
 def main(
     *,
     dataset: Dataset,
@@ -87,6 +104,7 @@ def main(
     init_fun: Callable[[int], None] = init_fun,
     train_handler: Callable[[nn.Module, int, int, int, torch.Tensor, torch.Tensor, str], None] = None,
 ):
+    print_cfg()
     save_dir = dataset.path
     os.makedirs(save_dir, exist_ok=True)
     device = torch.device('cuda', COMMON.GPU_ID) if torch.cuda.is_available() else torch.device('cpu')
