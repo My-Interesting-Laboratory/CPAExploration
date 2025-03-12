@@ -11,15 +11,19 @@ class Analysis:
     def __init__(
         self,
         root_dir,
+        with_analysis: bool = False,
         with_dataset: bool = False,
     ) -> None:
         self.root_dir = root_dir
+        self.with_analysis = with_analysis
         self.with_dataset = with_dataset
 
     def analysis(self) -> None:
         # draw dataset distribution
         self.common()
         # get data
+        if not self.with_analysis:
+            return
         experiment_dict = {}
         for tag in os.listdir(self.root_dir):
             if tag in ["analysis"]:

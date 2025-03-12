@@ -3,8 +3,8 @@ from typing import Dict, List, Tuple
 
 import torch
 
-from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
-from main import dataset, main, net, proj_net
+from config import ANALYSIS, EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
+from run import dataset, run, net, proj_net
 from torchays import nn
 from torchays.graph import bar, color, default_subplots
 
@@ -161,30 +161,32 @@ class Handler:
 
 def set_config(
     name: str,
+    type: str,
     norm_layer,
 ):
     GLOBAL.NAME = name
+    GLOBAL.TYPE = type
     TESTNET.NORM_LAYER = norm_layer
 
 
 def config():
     PATH.TAG = "cpas-norm"
 
-    TOY.N_SAMPLES = 1000
+    TOY.N_SAMPLES = 500
 
-    TRAIN.TRAIN = True
+    TRAIN.TRAIN = False
 
     TESTNET.N_LAYERS = [64] * 5
 
-    EXPERIMENT.CPAS = True
+    EXPERIMENT.CPAS = False
     EXPERIMENT.POINT = True
     EXPERIMENT.WORKERS = 64
 
 
-def run():
+def main():
     data = dataset()
     handler = Handler(os.path.join(data.path, GLOBAL.NAME))
-    main(
+    run(
         dataset=data,
         net=proj_net(
             net(),
@@ -196,17 +198,19 @@ def run():
     )
     if TRAIN.TRAIN:
         handler.save("norm.pkl")
-    # handler.statistic("norm.pkl", with_data=False)
+    handler.statistic("norm.pkl", with_data=False)
 
 
 if __name__ == "__main__":
     configs = [
-        ("Linear-[64]x5-norm", nn.Norm1d),
-        ("Linear-[64]x5-batch", nn.BatchNorm1d),
+        ("Linear-[64]x5-norm", "Random", nn.Norm1d),
+        ("Linear-[64]x5-batch", "Random", nn.BatchNorm1d),
+        ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
+        ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
     ]
-    for args in configs:
+    for cfg in configs:
         config()
-        set_config(*args)
-        print(f"-------- Now: {GLOBAL.NAME} ---------")
-        run()
-        print(f"-------- End: {GLOBAL.NAME} ---------\n")
+        set_config(*cfg)
+        print(f"========= Now: {GLOBAL.NAME} =========")
+        main()
+        print(f"========= End: {GLOBAL.NAME} =========\n")

@@ -239,6 +239,7 @@ class CPAs(_cpa):
         cpa = CPA(device=self.device, workers=self.workers)
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
+            print(f"Action: Net CPAs....")
             for model_name in model_list:
                 if self._is_continue(model_name):
                     continue
@@ -334,6 +335,7 @@ class Points(_cpa):
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
             # 在不同epoch下
+            print(f"Action: Point Distance ....")
             for model_name in model_list:
                 if self._is_continue(model_name):
                     continue
@@ -344,7 +346,9 @@ class Points(_cpa):
                 logger = get_logger(f"region-{os.path.splitext(model_name)[0]}", os.path.join(save_dir, "points.log"))
                 # 获取每个数据，在当前父区域下超平面的距离
                 values: Dict[int, _distance] = dict()
+                i = 0
                 for point, _ in dataloader:
+                    i += 1
                     point: torch.Tensor = point[0].float()
                     handler = Handler()
                     cpa.start(
@@ -361,13 +365,13 @@ class Points(_cpa):
                 os.makedirs(draw_dir, exist_ok=True)
                 for depth, value in values.items():
                     save_path = os.path.join(draw_dir, f"distance-{depth}.png")
-                    nd_x, nd_y = bar(value.neural_ds, 0.2)
-                    id_x, id_y = bar(value.inter_ds, 0.2)
+                    nd_x, nd_y = bar(value.neural_ds, 0.02)
+                    id_x, id_y = bar(value.inter_ds, 0.02)
                     with default_subplots(save_path, "value", "count", with_grid=False, with_legend=False) as ax:
-                        ax.set_xlim(-10, 10)
-                        ax.set_ylim(0, sum(nd_y))
-                        ax.bar(nd_x, nd_y, color=color(1), width=0.15, label=f"All Neurons: {sum(nd_y)}")
-                        ax.bar(id_x, id_y, color=color(0), width=0.15, label=f"Intersect Neurons: {sum(id_y)}")
+                        ax.set_xlim(-1, 1)
+                        ax.set_ylim(0, math.floor(sum(nd_y) / 5))
+                        ax.bar(nd_x, nd_y, color=color(1), width=0.05, label=f"All Neurons: {sum(nd_y)}")
+                        ax.bar(id_x, id_y, color=color(0), width=0.05, label=f"Intersect Neurons: {sum(id_y)}")
                         ax.legend(prop={"weight": "normal", "size": 7})
 
     def _handler_hpas(
@@ -414,7 +418,7 @@ class Experiment(_base):
         lr: float = 0.001,
         train_handler: Callable[[nn.Module, int, int, int, torch.Tensor, torch.Tensor, str], None] = None,
     ):
-        _train = Train(
+        train = Train(
             save_dir=self.save_dir,
             net=self.net,
             dataset=self.dataset,
@@ -425,8 +429,7 @@ class Experiment(_base):
             train_handler=train_handler,
             device=self.device,
         )
-        self.append(_train.run)
-        return self
+        self.append(train.run)
 
     def cpas(
         self,

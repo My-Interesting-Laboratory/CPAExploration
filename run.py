@@ -81,6 +81,7 @@ def net():
 
 
 def print_cfg():
+    print("------------------")
     print("Configuration:")
     print(f"Name: {GLOBAL.NAME}")
     print(f"Random Seed: {COMMON.SEED}")
@@ -94,10 +95,14 @@ def print_cfg():
         print(f"Net: TestNetLinear")
         print(f"|   Layers: {TESTNET.N_LAYERS}")
         print(f"|   Norm Layer: {TESTNET.NORM_LAYER.__name__}")
-        print()
+    print(f"Action:")
+    print(f"|   Train: {TRAIN.TRAIN}")
+    print(f"|   CPAS: {EXPERIMENT.CPAS}")
+    print(f"|   Point: {EXPERIMENT.POINT}")
+    print("------------------")
 
 
-def main(
+def run(
     *,
     dataset: Dataset,
     net: Callable[[int, bool], Model],
@@ -143,16 +148,17 @@ def main(
     # run
     exp.run()
 
-    if ANALYSIS.WITH_ANALYSIS:
-        analysis = Analysis(
-            root_dir=save_dir,
-            with_dataset=ANALYSIS.WITH_DATASET,
-        )
-        analysis()
+    # Analysis
+    analysis = Analysis(
+        root_dir=save_dir,
+        with_analysis=ANALYSIS.WITH_ANALYSIS,
+        with_dataset=ANALYSIS.WITH_DATASET,
+    )
+    analysis()
 
 
 if __name__ == "__main__":
-    main(
+    run(
         dataset=dataset(),
         net=proj_net(
             net(),

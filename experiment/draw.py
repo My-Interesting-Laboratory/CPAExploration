@@ -42,8 +42,8 @@ class DrawRegionImage:
         for draw_fun in draw_funs:
             try:
                 draw_fun()
-            except:
-                print(f"Warning: {draw_fun.__name__} is not supported.")
+            except Exception as e:
+                print(f"Warning: {draw_fun.__name__} is not supported. Error: {e}")
 
     def draw_region_img(self, fileName="region_img.png"):
         fig = plt.figure(0, figsize=(8, 7), dpi=600)
