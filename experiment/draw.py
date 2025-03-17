@@ -1,5 +1,6 @@
+import math
 import os
-from typing import Tuple
+from typing import Callable, Dict, List, Tuple
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -9,6 +10,25 @@ import torch
 
 from torchays import nn
 from torchays.graph import COLOR, color, plot_regions, plot_regions_3d
+
+
+def bar(
+    values: List[torch.Tensor],
+    interval: float = 0.2,
+    callable: Callable[[torch.Tensor], torch.Tensor] = None,
+) -> Tuple[List[float], List[int]]:
+    values = torch.cat(values).reshape(-1)
+    counts: Dict[float, int] = dict()
+    # interval
+    for v in values:
+        if callable is not None:
+            v = callable(v)
+        k = math.floor((v / interval + 0.5)) * interval
+        count = counts.pop(k, 0) + 1
+        counts[k] = count
+    x = sorted(counts)
+    y = [counts.get(k) for k in x]
+    return x, y
 
 
 class DrawRegionImage:

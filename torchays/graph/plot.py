@@ -1,5 +1,4 @@
-import math
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, List, Tuple
 
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.art3d as art3d
@@ -7,18 +6,6 @@ import numpy as np
 import torch
 from mpl_toolkits.mplot3d import axes3d
 from polytope import polytope
-
-# COLOR = (
-#     "lightcoral",
-#     "royalblue",
-#     "limegreen",
-#     "gold",
-#     "darkorchid",
-#     "aqua",
-#     "tomato",
-#     "deeppink",
-#     "teal",
-# )
 
 COLOR = ("#FA7F6F", "#82B0D2", "#FFBE7A", "#8ECFC9", "#BEB8DC", "#CFEAF1", "#F6CAE5", "#F0988C", "#B883D4")
 
@@ -219,19 +206,3 @@ def default_subplots(
     with_grid=True,
 ):
     return default_plt(savePath, xlabel, ylabel, mode, with_gray, with_legend, with_grid)
-
-
-def bar(
-    values: List[torch.Tensor],
-    interval: float = 0.2,
-) -> Tuple[List[float], List[int]]:
-    values = torch.cat(values).reshape(-1)
-    counts: Dict[float, int] = dict()
-    # interval
-    for v in values:
-        k = math.floor((v / interval + 0.5)) * interval
-        count = counts.pop(k, 0) + 1
-        counts[k] = count
-    x = sorted(counts)
-    y = [counts.get(k) for k in x]
-    return x, y

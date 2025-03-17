@@ -37,7 +37,7 @@ def _distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
 
 def distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
     d, _ = _distance(x, hyperplanes)
-    return d
+    return d.abs()
 
 
 def find_projection(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:

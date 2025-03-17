@@ -4,9 +4,10 @@ from typing import Dict, List, Tuple
 import torch
 
 from config import ANALYSIS, EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
-from run import dataset, run, net, proj_net
+from experiment.draw import bar
+from run import dataset, net, proj_net, run
 from torchays import nn
-from torchays.graph import bar, color, default_subplots
+from torchays.graph import color, default_subplots
 
 
 class Handler:
@@ -103,14 +104,17 @@ class Handler:
                 # k是每一层
                 # v是这一层每个step的值
                 values, probs = self._values(v)
-                bar_x, bar_y = bar(v, 0.2)
+                bar_x, bar_y = bar(v, 0.2, self._value)
                 with default_subplots(save_path, "value", "log_prob", with_grid=False, with_legend=False) as ax:
                     # 绘制满足高斯分布概率密度点图
-                    ax.scatter(values, probs, marker="o", c=color(0), alpha=0.4)
+                    # ax.scatter(values, probs, marker="o", c=color(0), alpha=0.4)
                     # 绘制统计神经元值数量的柱状图
                     ax2 = ax.twinx()
                     ax2.set_ylabel("counts", fontdict={"weight": "normal", "size": 15})
                     ax2.bar(bar_x, bar_y, color=color(1), width=0.15)
+
+    def _value(self, v: torch.Tensor) -> torch.Tensor:
+        return torch.log(v.abs())
 
     def _values(self, values: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         # 先求这个数据的高斯分布, 然后画出高斯分布后, 根据值计算其概率，绘制概率分布
@@ -170,13 +174,15 @@ def set_config(
 
 
 def config():
-    PATH.TAG = "cpas-norm"
+    PATH.TAG = "cpas-norm-test"
 
     TOY.N_SAMPLES = 500
 
     TRAIN.TRAIN = False
+    TRAIN.MAX_EPOCH = 1000
+    TRAIN.SAVE_EPOCH = [100, 500, 1000]
 
-    TESTNET.N_LAYERS = [64] * 5
+    TESTNET.N_LAYERS = [32] * 3
 
     EXPERIMENT.CPAS = False
     EXPERIMENT.POINT = True
@@ -203,10 +209,11 @@ def main():
 
 if __name__ == "__main__":
     configs = [
-        ("Linear-[64]x5-norm", "Random", nn.Norm1d),
-        ("Linear-[64]x5-batch", "Random", nn.BatchNorm1d),
-        ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
-        ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
+        # ("Linear-[64]x5-norm", "Random", nn.Norm1d),
+        # ("Linear-[64]x5-batch", "Random", nn.BatchNorm1d),
+        # ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
+        # ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
+        ("Linear-[32]x3-batch", "Moon", nn.Norm1d),
     ]
     for cfg in configs:
         config()

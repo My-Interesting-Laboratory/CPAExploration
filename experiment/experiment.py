@@ -2,7 +2,6 @@ import json
 import math
 import os
 from copy import deepcopy
-from cProfile import label
 from typing import Any, Callable, Dict, List, Tuple
 
 import torch
@@ -11,10 +10,10 @@ from torch.utils import data
 from dataset import Dataset
 from torchays import nn
 from torchays.cpa import CPA, Model, distance
-from torchays.graph import bar, color, default_subplots
+from torchays.graph import color, default_subplots
 from torchays.utils import get_logger
 
-from .draw import DrawRegionImage
+from .draw import DrawRegionImage, bar
 from .handler import Handler
 from .hpa import HyperplaneArrangement, HyperplaneArrangements
 
@@ -365,14 +364,18 @@ class Points(_cpa):
                 os.makedirs(draw_dir, exist_ok=True)
                 for depth, value in values.items():
                     save_path = os.path.join(draw_dir, f"distance-{depth}.png")
-                    nd_x, nd_y = bar(value.neural_ds, 0.02)
-                    id_x, id_y = bar(value.inter_ds, 0.02)
+                    nd_x, nd_y = bar(value.neural_ds, 0.2, self._ds)
+                    id_x, id_y = bar(value.inter_ds, 0.2, self._ds)
                     with default_subplots(save_path, "value", "count", with_grid=False, with_legend=False) as ax:
-                        ax.set_xlim(-1, 1)
-                        ax.set_ylim(0, math.floor(sum(nd_y) / 5))
-                        ax.bar(nd_x, nd_y, color=color(1), width=0.05, label=f"All Neurons: {sum(nd_y)}")
-                        ax.bar(id_x, id_y, color=color(0), width=0.05, label=f"Intersect Neurons: {sum(id_y)}")
+                        # ax.set_xlim(-1, 1)
+                        # ax.set_ylim(0, math.floor(sum(nd_y) / 5))
+                        ax.bar(nd_x, nd_y, color=color(1), width=0.15, label=f"All Neurons: {sum(nd_y)}")
+                        ax.bar(id_x, id_y, color=color(0), width=0.15, label=f"Intersect Neurons: {sum(id_y)}")
                         ax.legend(prop={"weight": "normal", "size": 7})
+
+    def _ds(self, v: torch.Tensor) -> torch.Tensor:
+        #
+        return torch.log(v)
 
     def _handler_hpas(
         self,
@@ -382,6 +385,7 @@ class Points(_cpa):
     ):
         for depth, hpa in hpas.items():
             hpa = hpa.pop()
+            # ds >= 0
             nerual_ds = distance(point, hpa.c_funs)
             inter_ds = None
             if hpa.intersect_funs is not None:
