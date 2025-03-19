@@ -16,6 +16,7 @@ from torchays.utils import get_logger
 from .draw import DrawRegionImage, bar
 from .handler import Handler
 from .hpa import HyperplaneArrangement, HyperplaneArrangements
+from .point import Neurals
 
 
 def accuracy(x, classes):
@@ -284,22 +285,6 @@ class CPAs(_cpa):
                     json.dump(result, w)
 
 
-class _distance:
-    neural_ds: List[torch.Tensor]
-    inter_ds: List[torch.Tensor]
-
-    def __init__(self):
-        self.inter_ds = list()
-        self.neural_ds = list()
-
-    def append(self, neural_ds: torch.Tensor = None, inter_ds: torch.Tensor = None):
-        if neural_ds is not None:
-            self.neural_ds.append(neural_ds)
-        if inter_ds is not None:
-            self.inter_ds.append(inter_ds)
-        return self
-
-
 class Points(_cpa):
 
     def __init__(
@@ -344,7 +329,7 @@ class Points(_cpa):
                 net.load_state_dict(torch.load(os.path.join(self.model_dir, model_name), weights_only=False))
                 logger = get_logger(f"region-{os.path.splitext(model_name)[0]}", os.path.join(save_dir, "points.log"))
                 # 获取每个数据，在当前父区域下超平面的距离
-                values: Dict[int, _distance] = dict()
+                values: Dict[int, Neurals] = dict()
                 i = 0
                 for point, _ in dataloader:
                     i += 1
@@ -363,34 +348,24 @@ class Points(_cpa):
                 draw_dir = os.path.join(save_dir, f"distance-count")
                 os.makedirs(draw_dir, exist_ok=True)
                 for depth, value in values.items():
-                    save_path = os.path.join(draw_dir, f"distance-{depth}.png")
-                    nd_x, nd_y = bar(value.neural_ds, 0.2, self._ds)
-                    id_x, id_y = bar(value.inter_ds, 0.2, self._ds)
-                    with default_subplots(save_path, "value", "count", with_grid=False, with_legend=False) as ax:
-                        # ax.set_xlim(-1, 1)
-                        # ax.set_ylim(0, math.floor(sum(nd_y) / 5))
-                        ax.bar(nd_x, nd_y, color=color(1), width=0.15, label=f"All Neurons: {sum(nd_y)}")
-                        ax.bar(id_x, id_y, color=color(0), width=0.15, label=f"Intersect Neurons: {sum(id_y)}")
-                        ax.legend(prop={"weight": "normal", "size": 7})
-
-    def _ds(self, v: torch.Tensor) -> torch.Tensor:
-        #
-        return torch.log(v)
+                    value.ds.draw_bar(os.path.join(draw_dir, f"distance-{depth}.png"))
+                    value.v.draw_bar(os.path.join(draw_dir, f"value-{depth}.png"))
+                    value.w_s.draw_bar(os.path.join(draw_dir, f"weight-{depth}.png"))
 
     def _handler_hpas(
         self,
-        values: Dict[int, _distance],
+        values: Dict[int, Neurals],
         point: torch.Tensor,
         hpas: Dict[int, List[HyperplaneArrangement]],
     ):
         for depth, hpa in hpas.items():
             hpa = hpa.pop()
             # ds >= 0
-            nerual_ds = distance(point, hpa.c_funs)
-            inter_ds = None
+            nerual_ds, nerual_v, nerual_ws = distance(point, hpa.c_funs)
+            inter_ds, inter_v, inter_ws = None, None, None
             if hpa.intersect_funs is not None:
-                inter_ds = distance(point, hpa.intersect_funs)
-            values[depth] = values.pop(depth, _distance()).append(nerual_ds, inter_ds)
+                inter_ds, inter_v, inter_ws = distance(point, hpa.intersect_funs)
+            values[depth] = values.pop(depth, Neurals()).append(nerual_ds, inter_ds, nerual_v, inter_v, nerual_ws, inter_ws)
         return values
 
 

@@ -59,6 +59,7 @@ class Handler:
         self.batch_norm_data[step_name] = current_bn_data
 
     def net_handler(self, key: str, value: torch.Tensor, description: str = ""):
+        # TODO: 有问题
         epoch = self.epoch + 1
         if epoch not in TRAIN.SAVE_EPOCH:
             return
@@ -103,26 +104,14 @@ class Handler:
                 save_path = os.path.join(save_dir, f"epoch_{epoch}-{k}.png")
                 # k是每一层
                 # v是这一层每个step的值
-                values, probs = self._values(v)
                 bar_x, bar_y = bar(v, 0.2, self._value)
                 with default_subplots(save_path, "value", "log_prob", with_grid=False, with_legend=False) as ax:
-                    # 绘制满足高斯分布概率密度点图
-                    # ax.scatter(values, probs, marker="o", c=color(0), alpha=0.4)
-                    # 绘制统计神经元值数量的柱状图
-                    ax2 = ax.twinx()
-                    ax2.set_ylabel("counts", fontdict={"weight": "normal", "size": 15})
-                    ax2.bar(bar_x, bar_y, color=color(1), width=0.15)
+                    ax.set_ylabel("counts", fontdict={"weight": "normal", "size": 15})
+                    ax.bar(bar_x, bar_y, color=color(1), width=0.15, label=f"All Neurons: {sum(bar_y)}")
+                    ax.legend(prop={"weight": "normal", "size": 7})
 
     def _value(self, v: torch.Tensor) -> torch.Tensor:
         return torch.log(v.abs())
-
-    def _values(self, values: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-        # 先求这个数据的高斯分布, 然后画出高斯分布后, 根据值计算其概率，绘制概率分布
-        values = torch.cat(values).reshape(-1)
-        std, mean = torch.std_mean(values)
-        gaussian = torch.distributions.Normal(mean, std)
-        probs = gaussian.log_prob(values)
-        return values, probs
 
     def _statistic_data(self):
         norm_data = self.batch_norm_data
@@ -174,17 +163,17 @@ def set_config(
 
 
 def config():
-    PATH.TAG = "cpas-norm-test"
+    PATH.TAG = "cpas-norm"
 
     TOY.N_SAMPLES = 500
 
-    TRAIN.TRAIN = False
-    TRAIN.MAX_EPOCH = 1000
-    TRAIN.SAVE_EPOCH = [100, 500, 1000]
+    TRAIN.TRAIN = True
+    TRAIN.MAX_EPOCH = 5000
+    TRAIN.SAVE_EPOCH = [100, 500, 1000, 1500, 2000, 3000, 5000]
 
-    TESTNET.N_LAYERS = [32] * 3
+    TESTNET.N_LAYERS = [64] * 5
 
-    EXPERIMENT.CPAS = False
+    EXPERIMENT.CPAS = True
     EXPERIMENT.POINT = True
     EXPERIMENT.WORKERS = 64
 
@@ -204,16 +193,16 @@ def main():
     )
     if TRAIN.TRAIN:
         handler.save("norm.pkl")
-    handler.statistic("norm.pkl", with_data=False)
+    # handler.statistic("norm.pkl", with_data=False)
 
 
 if __name__ == "__main__":
     configs = [
         # ("Linear-[64]x5-norm", "Random", nn.Norm1d),
         # ("Linear-[64]x5-batch", "Random", nn.BatchNorm1d),
-        # ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
-        # ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
-        ("Linear-[32]x3-batch", "Moon", nn.Norm1d),
+        ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
+        ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
+        # ("Linear-[32]x3-batch", "Moon", nn.Norm1d),
     ]
     for cfg in configs:
         config()
