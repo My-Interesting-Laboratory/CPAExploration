@@ -5,6 +5,12 @@ import torch
 
 from torchays import nn
 
+Moon = "Moon"
+GaussianQuantiles = "GaussianQuantiles"
+Random = "Random"
+Classification = "Classification"
+Mnist = "MNIST"
+
 
 class COMMON:
     GPU_ID: int = 7

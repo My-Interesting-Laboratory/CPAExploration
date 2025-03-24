@@ -348,9 +348,7 @@ class Points(_cpa):
                 draw_dir = os.path.join(save_dir, f"distance-count")
                 os.makedirs(draw_dir, exist_ok=True)
                 for depth, value in values.items():
-                    value.ds.draw_bar(os.path.join(draw_dir, f"distance-{depth}.png"))
-                    value.v.draw_bar(os.path.join(draw_dir, f"value-{depth}.png"))
-                    value.w_s.draw_bar(os.path.join(draw_dir, f"weight-{depth}.png"))
+                    value.draw_bar(draw_dir, depth)
 
     def _handler_hpas(
         self,
@@ -360,12 +358,16 @@ class Points(_cpa):
     ):
         for depth, hpa in hpas.items():
             hpa = hpa.pop()
-            # ds >= 0
             nerual_ds, nerual_v, nerual_ws = distance(point, hpa.c_funs)
             inter_ds, inter_v, inter_ws = None, None, None
             if hpa.intersect_funs is not None:
                 inter_ds, inter_v, inter_ws = distance(point, hpa.intersect_funs)
-            values[depth] = values.pop(depth, Neurals()).append(nerual_ds, inter_ds, nerual_v, inter_v, nerual_ws, inter_ws)
+            data_map = {
+                "distance": (nerual_ds, inter_ds),
+                "values": (nerual_v, inter_v),
+                "weights": (nerual_ws, inter_ws),
+            }
+            values[depth] = values.pop(depth, Neurals(*data_map.keys())).append(data_map)
         return values
 
 

@@ -1,9 +1,9 @@
 import os
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import torch
 
-from config import ANALYSIS, EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
+from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
 from experiment.draw import bar
 from run import dataset, net, proj_net, run
 from torchays import nn
@@ -166,10 +166,11 @@ def config():
     PATH.TAG = "cpas-norm"
 
     TOY.N_SAMPLES = 500
+    TOY.N_CLASS = 3
 
     TRAIN.TRAIN = True
     TRAIN.MAX_EPOCH = 5000
-    TRAIN.SAVE_EPOCH = [100, 500, 1000, 1500, 2000, 3000, 5000]
+    TRAIN.SAVE_EPOCH = [1, 5, 10, 50, 100, 500, 1000, 1500, 2000, 3000, 5000]
 
     TESTNET.N_LAYERS = [64] * 5
 
@@ -197,12 +198,16 @@ def main():
 
 
 if __name__ == "__main__":
+    from config import Classification, GaussianQuantiles, Moon
+
     configs = [
         # ("Linear-[64]x5-norm", "Random", nn.Norm1d),
         # ("Linear-[64]x5-batch", "Random", nn.BatchNorm1d),
-        ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
-        ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
+        # ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
+        # ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
         # ("Linear-[32]x3-batch", "Moon", nn.Norm1d),
+        ("Linear-[64]x5-norm", GaussianQuantiles, nn.Norm1d),
+        ("Linear-[64]x5-batch", GaussianQuantiles, nn.BatchNorm1d),
     ]
     for cfg in configs:
         config()
