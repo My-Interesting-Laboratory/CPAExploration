@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Any, Callable, Dict, Tuple
 
@@ -167,19 +168,24 @@ class Random(Toy):
         root: str,
         *,
         n_samples: int = 1000,
+        n_classes: int = 2,
         in_features: int = 2,
         random_state: int | None = None,
         bias: float = 0,
     ):
         super().__init__("random", root, n_samples, bias, random_state)
         self.in_features = in_features
+        self.n_classes = n_classes
 
     def make_data(self):
         np.random.seed(self.seed)
         data = np.random.uniform(-1, 1, (self.n_samples, self.in_features))
-        classes = np.sign(np.random.uniform(-1, 1, [self.n_samples]))
-        classes = np.where(classes > 0, 1, 0)
-        return data, classes, 2
+        samples = math.floor(self.n_samples / self.n_classes)
+        classes = np.zeros(self.n_samples)
+        for i in range(self.n_classes):
+            classes[i * samples : (i + 1) * samples] = i
+        np.random.shuffle(classes)
+        return data, classes, self.n_classes
 
     def name(self):
         return f"{self.type}-{self.n_samples}-{self.in_features}-{self.seed}"

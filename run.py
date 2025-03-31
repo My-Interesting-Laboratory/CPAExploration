@@ -6,7 +6,7 @@ import torch
 
 from config import ANALYSIS, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TESTNET, TOY, TRAIN
 from dataset import Classification, Dataset, GaussianQuantiles, Mnist, Moon, Random
-from experiment import Analysis, Experiment
+from experiment import Analysis, Experiment, TrainHandler
 from torchays import nn
 from torchays.cpa import Model, ProjectWrapper
 from torchays.models import LeNet, TestNetLinear
@@ -50,11 +50,11 @@ def dataset():
     if GLOBAL.TYPE == "Moon":
         dataset = Moon(root=root, n_samples=TOY.N_SAMPLES, noise=TOY.NOISE, random_state=COMMON.SEED, bias=TOY.BIAS)
     if GLOBAL.TYPE == "GaussianQuantiles":
-        dataset = GaussianQuantiles(root=root, n_samples=TOY.N_SAMPLES, n_classes=TOY.N_CLASS, bias=TOY.BIAS, random_state=COMMON.SEED)
+        dataset = GaussianQuantiles(root=root, n_samples=TOY.N_SAMPLES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
     if GLOBAL.TYPE == "Random":
-        dataset = Random(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, random_state=COMMON.SEED, bias=TOY.BIAS)
+        dataset = Random(root=root, n_classes=TOY.N_CLASSES, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, random_state=COMMON.SEED, bias=TOY.BIAS)
     if GLOBAL.TYPE == "Classification":
-        dataset = Classification(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, n_classes=TOY.N_CLASS, bias=TOY.BIAS, random_state=COMMON.SEED)
+        dataset = Classification(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
     if GLOBAL.TYPE == "MNIST":
         dataset = Mnist(root, MNIST.DOWNLOAD)
     return dataset
@@ -90,7 +90,7 @@ def print_cfg():
         print(f"Net: LeNet")
     else:
         print(f"|   n_samples: {TOY.N_SAMPLES}")
-        print(f"|   n_class: {TOY.N_CLASS}")
+        print(f"|   n_class: {TOY.N_CLASSES}")
         print(f"|   in_feature: {TOY.IN_FEATURES}")
         print(f"Net: TestNetLinear")
         print(f"|   Layers: {TESTNET.N_LAYERS}")
@@ -107,7 +107,7 @@ def run(
     dataset: Dataset,
     net: Callable[[int, bool], Model],
     init_fun: Callable[[int], None] = init_fun,
-    train_handler: Callable[[nn.Module, int, int, int, torch.Tensor, torch.Tensor, str], None] = None,
+    train_handler: TrainHandler = None,
 ):
     print_cfg()
     save_dir = dataset.path

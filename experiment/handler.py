@@ -2,6 +2,7 @@ from typing import Dict, List
 
 import torch
 
+from torchays import nn
 from torchays.cpa import BaseHandler
 
 from .hpa import HyperplaneArrangement
@@ -45,3 +46,11 @@ class Handler(BaseHandler):
         hp_arr = HyperplaneArrangement(p_funs, p_regions, c_funs, intersect_funs, n_regions, depth)
         depth_hp_arrs.append(hp_arr)
         self.hyperplane_arrangements[depth] = depth_hp_arrs
+
+
+class TrainHandler:
+    def step_handler(self, net: nn.Module, epoch: int, step: int, total_step: int, loss: torch.Tensor, acc: float):
+        raise NotImplementedError()
+
+    def epoch_handler(self, net: nn.Module, epoch: int, loss: torch.Tensor, acc: float):
+        raise NotImplementedError()

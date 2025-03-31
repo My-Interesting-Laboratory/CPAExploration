@@ -1,3 +1,4 @@
+import torch
 from config import ANALYSIS, EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
 from run import dataset, net, proj_net, run
 from torchays import nn
@@ -25,6 +26,9 @@ def config():
     EXPERIMENT.CPAS = False
     EXPERIMENT.POINT = True
     EXPERIMENT.WORKERS = 64
+
+    EXPERIMENT.PROJ_DIM = None
+    EXPERIMENT.PROJ_VALUES = torch.zeros((1, 28, 28)) + 0.5
 
 
 def main():

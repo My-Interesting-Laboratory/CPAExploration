@@ -10,11 +10,10 @@ from torch.utils import data
 from dataset import Dataset
 from torchays import nn
 from torchays.cpa import CPA, Model, distance
-from torchays.graph import color, default_subplots
 from torchays.utils import get_logger
 
-from .draw import DrawRegionImage, bar
-from .handler import Handler
+from .draw import DrawRegionImage
+from .handler import Handler, TrainHandler
 from .hpa import HyperplaneArrangement, HyperplaneArrangements
 from .point import Neurals
 
@@ -86,7 +85,7 @@ class Train(_base):
         max_epoch: int = 100,
         batch_size: int = 32,
         lr: float = 0.001,
-        train_handler: Callable[[nn.Module, int, int, int, torch.Tensor, torch.Tensor, str], None] = None,
+        train_handler: TrainHandler = None,
         device: torch.device = torch.device('cpu'),
     ) -> None:
         super().__init__(
@@ -133,7 +132,7 @@ class Train(_base):
                     torch.save(net.state_dict(), os.path.join(self.model_dir, f'net_{save_step[idx]}.pth'))
                     net.train()
                 if self.train_handler is not None:
-                    self.train_handler(net, epoch, j, total_step, loss, acc, self.model_dir)
+                    self.train_handler.step_handler(net, epoch, j, total_step, loss, acc)
                 # print(f"Epoch: {epoch+1} / {self.max_epoch}, Step: {j} / {total_step}, Loss: {loss:.4f}, Acc: {acc:.4f}")
             net.eval()
             if (epoch + 1) in self.save_epoch:
@@ -141,7 +140,9 @@ class Train(_base):
                 torch.save(net.state_dict(), os.path.join(self.model_dir, f'net_{epoch+1}.pth'))
             with torch.no_grad():
                 loss_sum = loss_sum / total_step
-                acc = self.val_net(net, train_loader).cpu().numpy()
+                acc = self.val_net(net, train_loader).cpu()
+                if self.train_handler is not None:
+                    self.train_handler.epoch_handler(net, epoch, loss_sum, acc)
                 print(f'Epoch: {epoch+1} / {self.max_epoch}, Loss: {loss_sum:.4f}, Accuracy: {acc:.4f}')
                 if acc > best_acc:
                     best_acc, best_epoch = acc, epoch
@@ -397,7 +398,7 @@ class Experiment(_base):
         max_epoch: int = 100,
         batch_size: int = 32,
         lr: float = 0.001,
-        train_handler: Callable[[nn.Module, int, int, int, torch.Tensor, torch.Tensor, str], None] = None,
+        train_handler: TrainHandler = None,
     ):
         train = Train(
             save_dir=self.save_dir,

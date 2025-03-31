@@ -37,7 +37,6 @@ class Neural:
             ax.bar(nd_x, nd_y, color=color(1), width=0.15, label=f"All Neurons: {sum(nd_y)}")
             ax.bar(id_x, id_y, color=color(0), width=0.15, label=f"Intersect Neurons: {sum(id_y)}")
             ax.legend(prop={"weight": "normal", "size": 7})
-            ax.set_ylim(0, 3000)
 
     def _ds(self, v: torch.Tensor) -> torch.Tensor:
         return torch.log(v)

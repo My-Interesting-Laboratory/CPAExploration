@@ -4,20 +4,26 @@ from typing import Dict, List
 import torch
 
 from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
+from experiment import TrainHandler
 from experiment.draw import bar
 from run import dataset, net, proj_net, run
 from torchays import nn
 from torchays.graph import color, default_subplots
 
 
-class Handler:
-    def __init__(self, root_dir: str = "./"):
-        self.epoch, self.step = -1, -1
-        self.batch_norm_data: Dict[str, Dict[str, Dict[str, torch.Tensor]]] = dict()
-        self.norm_neural_value: Dict[int, Dict[str, List[torch.Tensor]]] = dict()
-        self.root_dir = os.path.join(root_dir, "neural_regions")
+def value(v: torch.Tensor) -> torch.Tensor:
+    return torch.log(v.abs())
 
-    def train_handler(
+
+class Handler(TrainHandler):
+    def __init__(self, root_dir: str = "./"):
+        self.epoch = -1
+        self.step_data: Dict[str, Dict[str, Dict[str, torch.Tensor]]] = dict()
+        self.epoch_data: Dict[int, Dict[str, torch.Tensor]] = dict()
+        self.net_data: Dict[int, Dict[str, List[torch.Tensor]]] = dict()
+        self.root_dir = os.path.join(root_dir, "handlers")
+
+    def step_handler(
         self,
         net: nn.Module,
         epoch: int,
@@ -25,9 +31,7 @@ class Handler:
         total_step: int,
         loss: torch.Tensor,
         acc: torch.Tensor,
-        save_dir: str,
     ):
-        self.epoch, self.step = epoch, step
         step_name = f"{epoch}/{step}"
         current_bn_data = dict()
         for layer_name, module in net._modules.items():
@@ -40,7 +44,6 @@ class Handler:
             running_mean = parameters.get("running_mean").cpu()
             running_var = parameters.get("running_var").cpu()
             num_batches_tracked = parameters.get("num_batches_tracked").cpu()
-            # 计算对应的A_bn和B_bn
             p = torch.sqrt(running_var + module.eps)
             # weight_bn = w/√(var)
             weight_bn = weight / p
@@ -56,24 +59,35 @@ class Handler:
                 "bias_bn": bias_bn,
             }
             current_bn_data[layer_name] = save_dict
-        self.batch_norm_data[step_name] = current_bn_data
+        self.step_data[step_name] = current_bn_data
+
+    def epoch_handler(self, net: nn.Module, epoch: int, loss: torch.Tensor, acc: float):
+        self.epoch = epoch + 1
+        self.epoch_data[epoch] = {
+            "accuracy": acc,
+            "loss": loss,
+        }
+        if epoch >= 1000:
+            # TODO: 在epoch超过一定阈值的时候，将bn关闭。
+            
+            pass
 
     def net_handler(self, key: str, value: torch.Tensor, description: str = ""):
-        # TODO: 有问题
         epoch = self.epoch + 1
         if epoch not in TRAIN.SAVE_EPOCH:
             return
-        norm_v = self.norm_neural_value.pop(epoch, dict())
+        norm_v = self.net_data.pop(epoch, dict())
         v_list = norm_v.pop(key, list())
         v_list.append(value.clone().detach().cpu())
         norm_v[key] = v_list
-        self.norm_neural_value[epoch] = norm_v
+        self.net_data[epoch] = norm_v
 
     def save(self, name: str = "norm.pkl"):
         os.makedirs(self.root_dir, exist_ok=True)
         save_dict = {
-            "norm_values": self.norm_neural_value,
-            "data": self.batch_norm_data,
+            "step_data": self.step_data,
+            "epoch_data": self.epoch_data,
+            "net_data": self.net_data,
         }
         torch.save(save_dict, os.path.join(self.root_dir, name))
 
@@ -85,43 +99,37 @@ class Handler:
     ):
         if name is not None:
             save_dict: Dict[str, Dict] = torch.load(os.path.join(self.root_dir, name), weights_only=False)
-            self.norm_neural_value = save_dict.get("norm_values")
-            self.batch_norm_data = save_dict.get("data")
+            self.step_data = save_dict.get("step_data")
+            self.epoch_data = save_dict.get("epoch_data")
+            self.net_data = save_dict.get("net_data")
         if with_values:
-            self._statistic_values()
+            self._statistic_net_data()
         if with_data:
-            self._statistic_data()
+            # self._statistic_step_data()
+            self._statistic_epoch_data()
 
-    def _statistic_values(self):
+    def _statistic_net_data(self):
         # {epoch:{k1:[v1, v2...]}}
-        # 绘制每一层，神经元值的分布图。
-        # 以及平均分布图
         save_dir = os.path.join(self.root_dir, "values")
         os.makedirs(save_dir, exist_ok=True)
-        for epoch, kvs in self.norm_neural_value.items():
-            # 先画每个epoch的,所有值的分布图
+        for epoch, kvs in self.net_data.items():
             for k, v in kvs.items():
                 save_path = os.path.join(save_dir, f"epoch_{epoch}-{k}.png")
-                # k是每一层
-                # v是这一层每个step的值
-                bar_x, bar_y = bar(v, 0.2, self._value)
+                bar_x, bar_y = bar(v, 0.2, value)
                 with default_subplots(save_path, "value", "log_prob", with_grid=False, with_legend=False) as ax:
                     ax.set_ylabel("counts", fontdict={"weight": "normal", "size": 15})
                     ax.bar(bar_x, bar_y, color=color(1), width=0.15, label=f"All Neurons: {sum(bar_y)}")
                     ax.legend(prop={"weight": "normal", "size": 7})
 
-    def _value(self, v: torch.Tensor) -> torch.Tensor:
-        return torch.log(v.abs())
-
-    def _statistic_data(self):
-        norm_data = self.batch_norm_data
+    def _statistic_step_data(self):
+        step_data = self.step_data
         save_dict: Dict[str, Dict[int, Dict[str, torch.Tensor]] | List[str]] = dict()
-        step_list = list(norm_data.keys())
+        step_list = list(step_data.keys())
         steps = len(step_list)
         name_list = ["weight", "bias", "running_mean", "running_var", "weight_bn", "bias_bn"]
         for j in range(steps):
             step_name = step_list[j]
-            step_data = norm_data.pop(step_name)
+            step_data = step_data.pop(step_name)
             for layer_name, layer_data in step_data.items():
                 for name in name_list:
                     data = layer_data.pop(name)
@@ -151,6 +159,23 @@ class Handler:
                         ax.plot(range(len(step_list)), value, label=name, color=color(i))
                         i += 1
 
+    def _statistic_epoch_data(self):
+        epoch_data = self.epoch_data
+        accs = torch.zeros(len(epoch_data))
+        # get acc list
+        for epoch, data in epoch_data.items():
+            acc = data.get("accuracy", 0)
+            accs[epoch] = acc
+        rating = accs
+        # rating = accs[1:] - accs[0:-1]
+        # rating = value(rating)
+        # print plot of ratings
+        save_dir = os.path.join(self.root_dir, "epoch_data")
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, "acc_rating.png")
+        with default_subplots(save_path, "epoch", "rating", with_grid=False, with_legend=False) as ax:
+            ax.plot(range(len(rating)), rating, label="rating", color=color(0))
+
 
 def set_config(
     name: str,
@@ -165,14 +190,14 @@ def set_config(
 def config():
     PATH.TAG = "cpas-norm"
 
-    TOY.N_SAMPLES = 500
-    TOY.N_CLASS = 3
+    TOY.N_SAMPLES = 100
+    TOY.N_CLASSES = 4
 
     TRAIN.TRAIN = True
     TRAIN.MAX_EPOCH = 5000
     TRAIN.SAVE_EPOCH = [1, 5, 10, 50, 100, 500, 1000, 1500, 2000, 3000, 5000]
 
-    TESTNET.N_LAYERS = [64] * 5
+    TESTNET.N_LAYERS = [32] * 5
 
     EXPERIMENT.CPAS = True
     EXPERIMENT.POINT = True
@@ -190,24 +215,25 @@ def main():
             proj_values=EXPERIMENT.PROJ_VALUES,
             handler=handler.net_handler,
         ),
-        train_handler=handler.train_handler,
+        train_handler=handler,
     )
     if TRAIN.TRAIN:
         handler.save("norm.pkl")
-    # handler.statistic("norm.pkl", with_data=False)
+    handler.statistic("norm.pkl")
 
 
 if __name__ == "__main__":
     from config import Classification, GaussianQuantiles, Moon
 
     configs = [
-        # ("Linear-[64]x5-norm", "Random", nn.Norm1d),
-        # ("Linear-[64]x5-batch", "Random", nn.BatchNorm1d),
+        ("Linear-[32]x5-norm", "Random", nn.Norm1d),
+        ("Linear-[32]x5-batch", "Random", nn.BatchNorm1d),
+        # ("Linear-[32]x5-batch-half", "Random", nn.BatchNorm1d),
         # ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
         # ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
         # ("Linear-[32]x3-batch", "Moon", nn.Norm1d),
-        ("Linear-[64]x5-norm", GaussianQuantiles, nn.Norm1d),
-        ("Linear-[64]x5-batch", GaussianQuantiles, nn.BatchNorm1d),
+        # ("Linear-[64]x5-norm", GaussianQuantiles, nn.Norm1d),
+        # ("Linear-[64]x5-batch", GaussianQuantiles, nn.BatchNorm1d),
     ]
     for cfg in configs:
         config()

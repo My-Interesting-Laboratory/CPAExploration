@@ -27,7 +27,7 @@ class TOY:
     # All toy datasets
     IN_FEATURES: int = 2
     N_SAMPLES: int = 100
-    N_CLASS: int = 2
+    N_CLASSES: int = 2
     BIAS: float = 0
     # Moon
     NOISE: float = 0.2
