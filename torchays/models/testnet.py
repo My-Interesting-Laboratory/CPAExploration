@@ -64,6 +64,25 @@ class TestNetLinear(nn.Module):
         x = self._modules[f"{self.n_layers}"](x)
         return x
 
+    def _change_norm(self, _norm: nn.BatchNorm1d | nn.Norm1d):
+        norm_dict = {}
+        for k, v in self._modules.items():
+            if "_norm" not in k:
+                continue
+            v: nn.BatchNorm1d | nn.Norm1d
+            norm = _norm(v.num_features)
+            norm_dict[k] = norm
+        self._modules.update(norm_dict)
+
+    def load_state_dict(self, state_dict, strict=True, assign=False):
+
+        try:
+            self._change_norm(nn.BatchNorm1d)
+            return super().load_state_dict(state_dict, strict, assign)
+        except Exception as _:
+            self._change_norm(nn.Norm1d)
+            return super().load_state_dict(state_dict, strict, assign)
+
 
 class TestResNet(nn.Module):
     """Not cnn, use linear."""

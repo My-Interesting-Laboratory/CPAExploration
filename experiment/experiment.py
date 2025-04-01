@@ -248,6 +248,7 @@ class CPAs(_cpa):
                 save_dir = os.path.join(self.experiment_dir, os.path.splitext(model_name)[0])
                 os.makedirs(save_dir, exist_ok=True)
                 net.load_state_dict(torch.load(os.path.join(self.model_dir, model_name), weights_only=False))
+                net.to(self.device)
                 acc = self.val_net(net, val_dataloader).cpu().numpy()
                 print(f"Accuracy: {acc:.4f}")
                 handler = Handler() if self.is_draw or self.is_hpas else None
@@ -328,6 +329,7 @@ class Points(_cpa):
                 save_dir = os.path.join(self.experiment_dir, os.path.splitext(model_name)[0])
                 os.makedirs(save_dir, exist_ok=True)
                 net.load_state_dict(torch.load(os.path.join(self.model_dir, model_name), weights_only=False))
+                net.to(self.device)
                 logger = get_logger(f"region-{os.path.splitext(model_name)[0]}", os.path.join(save_dir, "points.log"))
                 # 获取每个数据，在当前父区域下超平面的距离
                 values: Dict[int, Neurals] = dict()

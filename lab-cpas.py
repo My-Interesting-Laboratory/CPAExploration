@@ -1,7 +1,8 @@
 import os
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 import torch
+from torch.nn.parameter import Parameter
 
 from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
 from experiment import TrainHandler
@@ -16,8 +17,9 @@ def value(v: torch.Tensor) -> torch.Tensor:
 
 
 class Handler(TrainHandler):
-    def __init__(self, root_dir: str = "./"):
+    def __init__(self, root_dir: str = "./", epoch_transformer: Callable[[nn.Module, int], None] | None = None):
         self.epoch = -1
+        self.epoch_transformer = epoch_transformer
         self.step_data: Dict[str, Dict[str, Dict[str, torch.Tensor]]] = dict()
         self.epoch_data: Dict[int, Dict[str, torch.Tensor]] = dict()
         self.net_data: Dict[int, Dict[str, List[torch.Tensor]]] = dict()
@@ -67,10 +69,8 @@ class Handler(TrainHandler):
             "accuracy": acc,
             "loss": loss,
         }
-        if epoch >= 1000:
-            # TODO: 在epoch超过一定阈值的时候，将bn关闭。
-            
-            pass
+        if self.epoch_transformer is not None:
+            self.epoch_transformer(net, epoch)
 
     def net_handler(self, key: str, value: torch.Tensor, description: str = ""):
         epoch = self.epoch + 1
@@ -94,18 +94,20 @@ class Handler(TrainHandler):
     def statistic(
         self,
         name: str = None,
-        with_values: bool = True,
-        with_data: bool = True,
+        with_net_data: bool = True,
+        with_step_data: bool = True,
+        with_epoch_data: bool = True,
     ):
         if name is not None:
             save_dict: Dict[str, Dict] = torch.load(os.path.join(self.root_dir, name), weights_only=False)
             self.step_data = save_dict.get("step_data")
             self.epoch_data = save_dict.get("epoch_data")
             self.net_data = save_dict.get("net_data")
-        if with_values:
+        if with_net_data:
             self._statistic_net_data()
-        if with_data:
-            # self._statistic_step_data()
+        if with_step_data:
+            self._statistic_step_data()
+        if with_epoch_data:
             self._statistic_epoch_data()
 
     def _statistic_net_data(self):
@@ -167,9 +169,7 @@ class Handler(TrainHandler):
             acc = data.get("accuracy", 0)
             accs[epoch] = acc
         rating = accs
-        # rating = accs[1:] - accs[0:-1]
-        # rating = value(rating)
-        # print plot of ratings
+
         save_dir = os.path.join(self.root_dir, "epoch_data")
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, "acc_rating.png")
@@ -177,14 +177,23 @@ class Handler(TrainHandler):
             ax.plot(range(len(rating)), rating, label="rating", color=color(0))
 
 
+class HandlerConfig:
+    WITH_NET_DATA: bool = True
+    WITH_STEP_DATA: bool = True
+    WITH_EPOCH_DATA: bool = True
+    EPOCH_TRANSFORMER: Callable[[nn.Module, int], None] | None = None
+
+
 def set_config(
     name: str,
     type: str,
     norm_layer,
+    epoch_transformer: Callable[[nn.Module, int], None] | None = None,
 ):
     GLOBAL.NAME = name
     GLOBAL.TYPE = type
     TESTNET.NORM_LAYER = norm_layer
+    HandlerConfig.EPOCH_TRANSFORMER = epoch_transformer
 
 
 def config():
@@ -193,7 +202,7 @@ def config():
     TOY.N_SAMPLES = 100
     TOY.N_CLASSES = 4
 
-    TRAIN.TRAIN = True
+    TRAIN.TRAIN = False
     TRAIN.MAX_EPOCH = 5000
     TRAIN.SAVE_EPOCH = [1, 5, 10, 50, 100, 500, 1000, 1500, 2000, 3000, 5000]
 
@@ -203,10 +212,42 @@ def config():
     EXPERIMENT.POINT = True
     EXPERIMENT.WORKERS = 64
 
+    HandlerConfig.WITH_NET_DATA = False
+    HandlerConfig.WITH_STEP_DATA = False
+    HandlerConfig.WITH_EPOCH_DATA = True
+
+
+def epoch_transformer(net: nn.Module, epoch: int):
+    if epoch != 100:
+        return
+    print("change the \"BatchNorm\" to \"Linear\"")
+    norm_dict = {}
+    for k, v in net._modules.items():
+        if "_norm" not in k:
+            continue
+        v: nn.BatchNorm1d
+        norm = nn.Norm1d(v.num_features, False, set_parameters(v)).to(v.weight.device)
+        norm_dict[k] = norm
+    net._modules.update(norm_dict)
+
+
+def set_parameters(batchNorm: nn.BatchNorm1d):
+    def _set_parameters(weight: Parameter, bias: Parameter):
+        p = torch.sqrt(batchNorm.running_var + batchNorm.eps)
+        # weight_bn = w/√(var)
+        weight_bn = batchNorm.weight / p
+        # bias_bn = b - w*mean/√(var)
+        bias_bn = batchNorm.bias - weight_bn * batchNorm.running_mean
+
+        weight.copy_(weight_bn)
+        bias.copy_(bias_bn)
+
+    return _set_parameters
+
 
 def main():
     data = dataset()
-    handler = Handler(os.path.join(data.path, GLOBAL.NAME))
+    handler = Handler(os.path.join(data.path, GLOBAL.NAME), HandlerConfig.EPOCH_TRANSFORMER)
     run(
         dataset=data,
         net=proj_net(
@@ -219,19 +260,19 @@ def main():
     )
     if TRAIN.TRAIN:
         handler.save("norm.pkl")
-    handler.statistic("norm.pkl")
+    handler.statistic("norm.pkl", HandlerConfig.WITH_NET_DATA, HandlerConfig.WITH_STEP_DATA, HandlerConfig.WITH_EPOCH_DATA)
 
 
 if __name__ == "__main__":
-    from config import Classification, GaussianQuantiles, Moon
+    from config import Classification, GaussianQuantiles, Moon, Random
 
     configs = [
-        ("Linear-[32]x5-norm", "Random", nn.Norm1d),
-        ("Linear-[32]x5-batch", "Random", nn.BatchNorm1d),
-        # ("Linear-[32]x5-batch-half", "Random", nn.BatchNorm1d),
-        # ("Linear-[64]x5-norm", "Moon", nn.Norm1d),
-        # ("Linear-[64]x5-batch", "Moon", nn.BatchNorm1d),
-        # ("Linear-[32]x3-batch", "Moon", nn.Norm1d),
+        # ("Linear-[32]x5-norm", Random, nn.Norm1d),
+        # ("Linear-[32]x5-batch", Random, nn.BatchNorm1d),
+        ("Linear-[32]x5-batch-half", Random, nn.BatchNorm1d, epoch_transformer),
+        # ("Linear-[64]x5-norm", Moon, nn.Norm1d),
+        # ("Linear-[64]x5-batch", Moon, nn.BatchNorm1d),
+        # ("Linear-[32]x3-batch", Moon, nn.Norm1d),
         # ("Linear-[64]x5-norm", GaussianQuantiles, nn.Norm1d),
         # ("Linear-[64]x5-batch", GaussianQuantiles, nn.BatchNorm1d),
     ]
