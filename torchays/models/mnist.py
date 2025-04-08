@@ -1,5 +1,3 @@
-import torch
-
 from .. import nn
 from ..cpa.model import Model
 

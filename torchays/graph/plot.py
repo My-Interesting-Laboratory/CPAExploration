@@ -160,7 +160,7 @@ class default_plt:
         savePath,
         xlabel="",
         ylabel="",
-        mode="png",
+        mode="jpg",
         with_gray=False,
         with_legend=True,
         with_grid=True,

@@ -139,11 +139,11 @@ class Train(_base):
                 print(f"Save net: net_{epoch+1}.pth")
                 torch.save(net.state_dict(), os.path.join(self.model_dir, f'net_{epoch+1}.pth'))
             with torch.no_grad():
-                loss_sum = loss_sum / total_step
+                loss_avg = loss_sum / total_step
                 acc = self.val_net(net, train_loader).cpu()
                 if self.train_handler is not None:
-                    self.train_handler.epoch_handler(net, epoch, loss_sum, acc)
-                print(f'Epoch: {epoch+1} / {self.max_epoch}, Loss: {loss_sum:.4f}, Accuracy: {acc:.4f}')
+                    self.train_handler.epoch_handler(net, epoch, loss_avg, acc)
+                print(f'Epoch: {epoch+1} / {self.max_epoch}, Loss: {loss_avg:.4f}, Accuracy: {acc:.4f}')
                 if acc > best_acc:
                     best_acc, best_epoch = acc, epoch
                     best_dict = deepcopy(net.state_dict())

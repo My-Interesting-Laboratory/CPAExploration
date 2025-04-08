@@ -155,14 +155,3 @@ def run(
         with_dataset=ANALYSIS.WITH_DATASET,
     )
     analysis()
-
-
-if __name__ == "__main__":
-    run(
-        dataset=dataset(),
-        net=proj_net(
-            net(),
-            proj_dims=EXPERIMENT.PROJ_DIM,
-            proj_values=EXPERIMENT.PROJ_VALUES,
-        ),
-    )
