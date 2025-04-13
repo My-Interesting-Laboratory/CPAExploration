@@ -316,7 +316,7 @@ class CPA:
         return c_cpa, filter_region, neighbor_regions
 
     @log_time("find child region inner point", 2, False)
-    def _find_region_inner_point(self, functions: torch.Tensor) -> Tuple[np.ndarray, float]:
+    def _find_region_inner_point(self, functions: torch.Tensor) -> torch.Tensor:
         """
         Calculate the max radius of the insphere in the region to make the radius less than the distance of the insphere center to the all functions
         which can express a liner region.
@@ -344,27 +344,34 @@ class CPA:
         c_inner_point: torch.Tensor,
     ):
         """Get the bound hyperplanes which can filter the same regions, and find the neighbor regions."""
-        c_edge_funcs, c_edge_region, neighbor_regions = [], [], []
+        neighbor_regions = []
         filter_region = torch.zeros_like(c_region).type(torch.int8)
 
         optim_funcs, optim_x = constraint_funcs.numpy(), c_inner_point.double().numpy()
         p_points = find_projection(c_inner_point, funcs)
+        c_edge_idx, redundant_idx = [], []
+        # TODO: Too much time spent.
         for i in range(optim_funcs.shape[0]):
+            # Find the edge hyperplanes by "vertify".
             if not vertify(p_points[i], funcs, region):
-                pn_funcs = np.delete(optim_funcs, i, axis=0)
+                # Use the "lineprog_intersect" to find the edge hyperplanes.
+                pn_funcs = np.delete(optim_funcs, [i, *redundant_idx], axis=0)
                 success = lineprog_intersect(optim_funcs[i], pn_funcs, optim_x, self.o_bounds)
                 if not success:
+                    redundant_idx.append(i)
                     continue
-            c_edge_funcs.append(funcs[i])
-            c_edge_region.append(region[i])
-            # Find the neighbor regions.
-            if i < c_region.shape[0]:
-                neighbor_region = c_region.clone()
-                neighbor_region[i] = -region[i]
-                neighbor_regions.append(neighbor_region)
-                filter_region[i] = region[i]
-        c_edge_funcs = torch.stack(c_edge_funcs)
-        c_edge_region = torch.tensor(c_edge_region, dtype=torch.int8)
+            c_edge_idx.append(i)
+
+        for i in c_edge_idx:
+            if i >= c_region.shape[0]:
+                continue
+            # Find neighbor regions.
+            neighbor_region = c_region.clone()
+            neighbor_region[i] = -c_region[i]
+            neighbor_regions.append(neighbor_region)
+            # Get filter region.
+            filter_region[i] = c_region[i]
+        c_edge_funcs, c_edge_region = funcs[c_edge_idx], region[c_edge_idx]
         return c_edge_funcs, c_edge_region, filter_region, neighbor_regions
 
     def _nn_region_counts(self, cpa: CPAFunc, set_register: Callable[[CPAFunc], None], cpa_register: Callable[[CPAFunc], bool]) -> int:

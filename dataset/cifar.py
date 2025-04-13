@@ -6,22 +6,17 @@ from torch.utils import data
 from torchvision.datasets import cifar
 
 from .dataset import Dataset
-
-
-class Cifar10(Dataset):
-    def __init__(self, root: str, download: bool = True):
-        super().__init__("cifar10", root)
-        self.download = download
-
-    def make_dataset(self) -> Tuple[data.Dataset, int]:
-        cifar10 = CIFAR10(root=self.path, download=self.download)
-        return cifar10, len(cifar10.classes)
-
-    def make_path(self):
-        return os.path.join(self.root, self.type)
+from .utils import transform as _transform
 
 
 class CIFAR10(cifar.CIFAR10):
+
+    def __init__(self, root, train=True, transform=None, target_transform=None, download=False):
+        super().__init__(root, train, transform, target_transform, download)
+        if self.transform is None:
+            self.transform = _transform
+        self.input_size = (3, 32, 32)
+
     def __getitem__(self, index):
         """
         Args:
@@ -42,4 +37,17 @@ class CIFAR10(cifar.CIFAR10):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return img, target, index
+        return img, target
+
+
+class Cifar10(Dataset):
+    def __init__(self, root: str, download: bool = True):
+        super().__init__("cifar10", root)
+        self.download = download
+
+    def make_dataset(self) -> Tuple[data.Dataset, int]:
+        cifar10 = CIFAR10(root=self.path, download=self.download)
+        return cifar10, len(cifar10.classes)
+
+    def make_path(self):
+        return os.path.join(self.root, self.type)

@@ -4,14 +4,9 @@ from typing import Any, Tuple
 from PIL import Image
 from torch.utils import data
 from torchvision.datasets import mnist
-from torchvision.transforms import Compose, ToTensor
 
 from .dataset import Dataset
-
-
-def _transform(img: Image.Image):
-    trans = Compose([ToTensor()])
-    return trans(img)
+from .utils import transform as _transform
 
 
 class MNIST(mnist.MNIST):

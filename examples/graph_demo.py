@@ -44,14 +44,15 @@ class TestNet(nn.Module):
         return weight_graph, bias_graph
 
 
-net = TestNet().to(device)
-data = torch.randn(2, 3, 8, 8).to(device)
+if __name__ == "__main__":
+    net = TestNet().to(device)
+    data = torch.randn(2, 3, 8, 8).to(device)
 
-net.graph()
-with torch.no_grad():
-    output, graph = net(data)
-    weight, weight = graph.get(WEIGHT_GRAPH), graph.get(BIAS_GRAPH)
-    print(output)
-    for i in range(output.size(0)):
-        output = (weight[i] * data[i]).sum(dim=(1, 2, 3)) + weight[i]
+    net.graph()
+    with torch.no_grad():
+        output, graph = net(data)
+        weight, weight = graph.get(WEIGHT_GRAPH), graph.get(BIAS_GRAPH)
         print(output)
+        for i in range(output.size(0)):
+            output = (weight[i] * data[i]).sum(dim=(1, 2, 3)) + weight[i]
+            print(output)

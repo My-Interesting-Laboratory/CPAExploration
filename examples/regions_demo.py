@@ -19,6 +19,7 @@ np.random.seed(5)
 class TestNet(nn.Module):
     def __init__(self, input_size=(2,)):
         super(TestNet, self).__init__()
+        self.n_relu = 1
         self.relu = nn.ReLU()
         self.fc1 = nn.Linear(input_size[0], 16, bias=True)
         self.fc2 = nn.Linear(16, 16, bias=True)
@@ -77,13 +78,12 @@ cpa = CPA(device=device)
 
 handler = Handler()
 # 对网络进行cpa的分析。
-num = cpa.start(net, 1, handler=handler)
+num = cpa.start(net, handler=handler)
 
 ax = plt.subplot()
 for i in range(num):
     func, region, point = handler.funs[i], handler.regions[i], handler.points[i]
-    func = -region.view(-1, 1) * func
-    func = func.numpy()
+    func = -region.reshape(-1, 1) * func
     A, B = func[:, :-1], -func[:, -1]
 
     # 在输入为2D的情况下，绘制区域图片

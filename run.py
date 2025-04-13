@@ -4,12 +4,11 @@ from typing import Callable
 import numpy as np
 import torch
 
-from config import ANALYSIS, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TESTNET, TOY, TRAIN
-from dataset import Classification, Dataset, GaussianQuantiles, Mnist, Moon, Random
+from config import ANALYSIS, CIFAR10, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TESTNET, TOY, TRAIN, TYPE
+from dataset import Classification, Dataset, GaussianQuantiles, Mnist, Moon, Random, cifar
 from experiment import Analysis, Experiment, TrainHandler
-from torchays import nn
 from torchays.cpa import Model, ProjectWrapper
-from torchays.models import LeNet, TestNetLinear
+from torchays.models import CIFARNet, LeNet, TestNetLinear
 
 
 def init_fun(seed: int = 0):
@@ -47,25 +46,30 @@ def proj_net(
 def dataset():
     root: str = os.path.join(PATH.DIR, PATH.TAG) if PATH.TAG is not None and len(PATH.TAG) > 0 else PATH.DIR
     dataset = None
-    if GLOBAL.TYPE == "Moon":
+    if GLOBAL.TYPE == TYPE.Moon:
         dataset = Moon(root=root, n_samples=TOY.N_SAMPLES, noise=TOY.NOISE, random_state=COMMON.SEED, bias=TOY.BIAS)
-    if GLOBAL.TYPE == "GaussianQuantiles":
+    if GLOBAL.TYPE == TYPE.GaussianQuantiles:
         dataset = GaussianQuantiles(root=root, n_samples=TOY.N_SAMPLES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
-    if GLOBAL.TYPE == "Random":
+    if GLOBAL.TYPE == TYPE.Random:
         dataset = Random(root=root, n_classes=TOY.N_CLASSES, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, random_state=COMMON.SEED, bias=TOY.BIAS)
-    if GLOBAL.TYPE == "Classification":
+    if GLOBAL.TYPE == TYPE.Classification:
         dataset = Classification(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
-    if GLOBAL.TYPE == "MNIST":
+    if GLOBAL.TYPE == TYPE.MNIST:
         dataset = Mnist(root, MNIST.DOWNLOAD)
+    if GLOBAL.TYPE == TYPE.CIFAR10:
+        dataset = cifar.Cifar10(root, CIFAR10.DOWNLOAD)
     return dataset
 
 
 def net():
 
     def wrapper(n_classes: int) -> Model:
-        if GLOBAL.TYPE == "MNIST":
+        if GLOBAL.TYPE == TYPE.MNIST:
             # LeNet
             model = LeNet()
+        if GLOBAL.TYPE == TYPE.CIFAR10:
+            # CIFARNet
+            model = CIFARNet(CIFAR10.NORM_LAYER, GLOBAL.NAME)
         else:
             # Toy
             model = TestNetLinear(
@@ -86,8 +90,11 @@ def print_cfg():
     print(f"Name: {GLOBAL.NAME}")
     print(f"Random Seed: {COMMON.SEED}")
     print(f"Dataset: {GLOBAL.TYPE}")
-    if GLOBAL.TYPE == "MNIST":
+    if GLOBAL.TYPE == TYPE.MNIST:
         print(f"Net: LeNet")
+    if GLOBAL.TYPE == TYPE.CIFAR10:
+        print(f"Net: CIFARNet")
+        print(f"|   Norm Layer: {CIFAR10.NORM_LAYER.__name__}")
     else:
         print(f"|   n_samples: {TOY.N_SAMPLES}")
         print(f"|   n_class: {TOY.N_CLASSES}")

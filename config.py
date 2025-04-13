@@ -5,11 +5,15 @@ import torch
 
 from torchays import nn
 
-Moon = "Moon"
-GaussianQuantiles = "GaussianQuantiles"
-Random = "Random"
-Classification = "Classification"
-Mnist = "MNIST"
+
+class TYPE:
+    Moon = "Moon"
+    GaussianQuantiles = "GaussianQuantiles"
+    Random = "Random"
+    Classification = "Classification"
+    MNIST = "MNIST"
+    CIFAR10 = "CIFAR10"
+    CIFAR100 = "CIFAR100"
 
 
 class COMMON:
@@ -35,6 +39,11 @@ class TOY:
 
 class MNIST:
     DOWNLOAD: bool = True
+
+
+class CIFAR10:
+    DOWNLOAD: bool = True
+    NORM_LAYER = nn.BatchNorm2d
 
 
 class TESTNET:
@@ -87,4 +96,4 @@ class ANALYSIS:
     # Analysis
     WITH_ANALYSIS: bool = False
     # draw the dataset distribution
-    WITH_DATASET: bool = True
+    WITH_DATASET: bool = False

@@ -4,11 +4,13 @@ from typing import Callable, Dict, List
 import torch
 from torch.nn.parameter import Parameter
 
-from config import EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN
+from config import ANALYSIS, CIFAR10, EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN, TYPE
 from experiment import TrainHandler
 from experiment.draw import bar
 from run import dataset, net, proj_net, run
 from torchays import nn
+from torchays.nn.modules.batchnorm import _BatchNorm
+from torchays.nn.modules.norm import _Norm
 from torchays.graph import color, default_subplots
 
 
@@ -296,16 +298,19 @@ def main():
     handler.statistic("handler.pkl", HandlerConfig.WITH_NET_DATA, HandlerConfig.WITH_STEP_DATA, HandlerConfig.WITH_EPOCH_DATA)
 
 
-def epoch_transformer(callable: Callable[[nn.BatchNorm1d], nn.BatchNorm1d | nn.Norm1d], info: str):
+def epoch_transformer(
+    callable: Callable[[_BatchNorm], _BatchNorm | _Norm],
+    info: str,
+    epoch_threshold: int = 100,
+):
     def transformer(net: nn.Module, epoch: int):
-        if epoch != 100:
+        if epoch != epoch_threshold:
             return
         print(f"Change the \"BatchNorm\" to \"{info}\"")
         norm_dict = {}
         for k, v in net._modules.items():
-            if "_norm" not in k:
+            if not isinstance(v, _BatchNorm):
                 continue
-            v: nn.BatchNorm1d
             norm = callable(v).to(v.weight.device)
             norm_dict[k] = norm
         net._modules.update(norm_dict)
@@ -313,8 +318,8 @@ def epoch_transformer(callable: Callable[[nn.BatchNorm1d], nn.BatchNorm1d | nn.N
     return transformer
 
 
-def epoch_linear():
-    def callable(v: nn.BatchNorm1d) -> nn.Norm1d:
+def epoch_linear(norm: _Norm, epoch_threshold: int = 100):
+    def callable(v: _BatchNorm) -> _Norm:
         def _set_parameters(weight: Parameter, bias: Parameter):
             p = torch.sqrt(v.running_var + v.eps)
             # weight_bn = w/√(var)
@@ -325,9 +330,9 @@ def epoch_linear():
             weight.copy_(weight_bn)
             bias.copy_(bias_bn)
 
-        return nn.Norm1d(v.num_features, False, _set_parameters)
+        return norm(v.num_features, False, _set_parameters)
 
-    return epoch_transformer(callable, "Linear")
+    return epoch_transformer(callable, "Linear", epoch_threshold=epoch_threshold)
 
 
 class HandlerConfig:
@@ -350,6 +355,7 @@ def set_config(
     GLOBAL.NAME = name
     GLOBAL.TYPE = type
     TESTNET.NORM_LAYER = norm_layer
+    CIFAR10.NORM_LAYER = norm_layer
     HandlerConfig.EPOCH_TRANSFORMER = epoch_transformer
 
 
@@ -361,30 +367,42 @@ def config():
     TOY.IN_FEATURES = 2
 
     TRAIN.TRAIN = False
-    TRAIN.MAX_EPOCH = 30000
+    TRAIN.MAX_EPOCH = 500
     TRAIN.SAVE_EPOCH = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 500, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 20000, 30000]
-    TRAIN.BATCH_SIZE = 256
-    TRAIN.LR = 5e-4
+    TRAIN.BATCH_SIZE = 128
+    TRAIN.LR = 1e-4
 
     TESTNET.N_LAYERS = [32] * 5
 
+    CIFAR10.DOWNLOAD = True
+
     EXPERIMENT.WORKERS = 64
     EXPERIMENT.CPAS = False
+    EXPERIMENT.BOUND = (0, 1)
     EXPERIMENT.POINT = False
+    EXPERIMENT.PROJ_DIM = (1500, 1600)
+    EXPERIMENT.PROJ_VALUES = torch.zeros((3, 32, 32)) + 0.5
+
+    ANALYSIS.WITH_DATASET = False
 
     HandlerConfig.WITH_NET_DATA = False
     HandlerConfig.WITH_STEP_DATA = False
     HandlerConfig.WITH_EPOCH_DATA = False
     HandlerConfig.ANALYSIS = True
+    HandlerConfig.WITH_HANDLERS = False
+    HandlerConfig.WITH_NET_REGIONS = True
 
 
 if __name__ == "__main__":
-    from config import Classification, GaussianQuantiles, Moon, Random
-
     configs = [
-        ("Linear-[32]x5-norm", Random, nn.Norm1d),
-        ("Linear-[32]x5-batch", Random, nn.BatchNorm1d),
-        ("Linear-[32]x5-batch-linear", Random, nn.BatchNorm1d, epoch_linear()),
+        # # Linear-random
+        # ("Linear-[32]x5-norm", TYPE.Random, nn.Norm1d),
+        # ("Linear-[32]x5-batch", TYPE.Random, nn.BatchNorm1d),
+        # ("Linear-[32]x5-batch-linear", TYPE.Random, nn.BatchNorm1d, epoch_linear(nn.Norm1d)),
+        # CFAR10
+        ("CIFAR10-batch-linear", TYPE.CIFAR10, nn.BatchNorm2d, epoch_linear(nn.Norm2d, 50)),
+        ("CIFAR10-batch", TYPE.CIFAR10, nn.BatchNorm2d),
+        ("CIFAR10-norm", TYPE.CIFAR10, nn.Norm2d),
     ]
 
     for cfg in configs:

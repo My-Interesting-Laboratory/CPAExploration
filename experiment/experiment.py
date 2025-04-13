@@ -2,12 +2,13 @@ import json
 import math
 import os
 from copy import deepcopy
+import time
 from typing import Any, Callable, Dict, List, Tuple
 
 import torch
 from torch.utils import data
 
-from dataset import Dataset
+
 from torchays import nn
 from torchays.cpa import CPA, Model, distance
 from torchays.utils import get_logger
@@ -30,7 +31,7 @@ class _base:
         save_dir: str,
         *,
         net: Callable[[int, bool], Model] = None,
-        dataset: Callable[..., Tuple[Dataset, int]] = None,
+        dataset: Callable[..., Tuple[data.Dataset, int]] = None,
         save_epoch: List[int] = [100],
         device: torch.device = torch.device('cpu'),
     ) -> None:
@@ -79,7 +80,7 @@ class Train(_base):
         self,
         save_dir: str,
         net: Callable[[int, bool], Model],
-        dataset: Callable[..., Tuple[Dataset, int]],
+        dataset: Callable[..., Tuple[data.Dataset, int]],
         *,
         save_epoch: List[int] = [100],
         max_epoch: int = 100,
@@ -114,6 +115,7 @@ class Train(_base):
         best_acc, best_dict, best_epoch = 0, {}, 0
         for epoch in range(self.max_epoch):
             net.train()
+            t_start = time.time()
             loss_sum = 0
             for j, (x, y) in enumerate(train_loader, 1):
                 x: torch.Tensor = x.float().to(self.device)
@@ -143,7 +145,7 @@ class Train(_base):
                 acc = self.val_net(net, train_loader).cpu()
                 if self.train_handler is not None:
                     self.train_handler.epoch_handler(net, epoch, loss_avg, acc)
-                print(f'Epoch: {epoch+1} / {self.max_epoch}, Loss: {loss_avg:.4f}, Accuracy: {acc:.4f}')
+                print(f"Epoch: {epoch+1} / {self.max_epoch}, Loss: {loss_avg:.4f}, Accuracy: {acc:.4f}, Time: {time.time()-t_start:.3f}s")
                 if acc > best_acc:
                     best_acc, best_epoch = acc, epoch
                     best_dict = deepcopy(net.state_dict())
@@ -156,7 +158,7 @@ class _cpa(_base):
         self,
         save_dir: str,
         net: Callable[[int, bool], Model],
-        dataset: Callable[..., Tuple[Dataset, int]],
+        dataset: Callable[..., Tuple[data.Dataset, int]],
         *,
         save_epoch: List[int] = [100],
         best_epoch: bool = False,
@@ -184,7 +186,7 @@ class _cpa(_base):
             return False
         return True
 
-    def input_size(self, net: Model, dataset: Dataset) -> Tuple[int] | torch.Size:
+    def input_size(self, net: Model, dataset: data.Dataset) -> Tuple[int] | torch.Size:
         try:
             return net.input_size
         except:
@@ -196,7 +198,7 @@ class CPAs(_cpa):
         self,
         save_dir: str,
         net: Callable[[int, bool], Model],
-        dataset: Callable[..., Tuple[Dataset, int]],
+        dataset: Callable[..., Tuple[data.Dataset, int]],
         *,
         workers: int = 1,
         save_epoch: List[int] = [100],
@@ -294,7 +296,7 @@ class Points(_cpa):
         save_dir: str,
         *,
         net: Callable[[int, bool], Model],
-        dataset: Callable[..., Tuple[Dataset, int]],
+        dataset: Callable[..., Tuple[data.Dataset, int]],
         bounds: Tuple[float] = (-1, 1),
         depth: int = -1,
         save_epoch: List[int] = [100],
@@ -381,7 +383,7 @@ class Experiment(_base):
         init_fun: Callable[..., None],
         *,
         net: Callable[[int, bool], Model],
-        dataset: Callable[..., Tuple[Dataset, int]],
+        dataset: Callable[..., Tuple[data.Dataset, int]],
         save_epoch: List[int] = [100],
         device: torch.device = torch.device('cpu'),
     ) -> None:
@@ -394,6 +396,21 @@ class Experiment(_base):
         )
         self.init_fun = init_fun
         self.runs = list()
+
+    def _info(self):
+        net, dataset, n_classes = self._init_model()
+        parameters = sum([param.nelement() for param in net.parameters()])
+        result = {
+            "Net": {
+                "n_parameters": parameters,
+            },
+            "data.Dataset": {
+                "n_dataset": len(dataset),
+                "n_classes": n_classes,
+            },
+        }
+        with open(os.path.join(self.root_dir, "info.json"), "w") as w:
+            json.dump(result, w)
 
     def train(
         self,
@@ -466,6 +483,7 @@ class Experiment(_base):
         self.runs.append(fun)
 
     def run(self):
+        self._info()
         for run in self.runs:
             run()
 

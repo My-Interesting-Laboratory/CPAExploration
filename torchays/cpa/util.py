@@ -5,12 +5,15 @@ from typing import Callable, List, Tuple, TypeAlias
 import torch
 
 one = torch.ones(1)
+zero = torch.zeros(1)
 
 
-def _get_regions(x: torch.Tensor, functions: torch.Tensor) -> torch.Tensor:
+def _get_regions(x: torch.Tensor, functions: torch.Tensor, eps: float = 0) -> torch.Tensor:
     W, B = functions[:, :-1], functions[:, -1]
-    regions = torch.sign(x @ W.T + B)
-    return regions
+    y = x @ W.T + B
+    if eps >= 0:
+        y = torch.where(y.abs() <= eps, zero, y)
+    return torch.sign(y)
 
 
 def get_regions(x: torch.Tensor, functions: torch.Tensor) -> torch.Tensor:
@@ -23,7 +26,7 @@ def vertify(x: torch.Tensor, functions: torch.Tensor, region: torch.Tensor) -> b
     """
     Verify that the current point x is in the region
     """
-    point = _get_regions(x, functions)
+    point = _get_regions(x, functions, eps=1e-6)
     return -1 not in region * point
 
 
@@ -96,7 +99,6 @@ def _tuple_bounds(bounds: Tuple[Tuple[float, float]], dim: int = 2) -> BoundType
 
 
 def _number_bound(bound: float | int, dim: int = 2) -> BoundTypes:
-    assert len(bound) == 2, f"length of the bounds must be 2. len(bounds) = {len(bound)}."
     bounds = (-bound, bound)
     return _tuple_bound(bounds, dim)
 
