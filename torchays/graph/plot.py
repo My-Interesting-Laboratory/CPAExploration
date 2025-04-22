@@ -3,7 +3,6 @@ from typing import Any, Callable, List, Tuple
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
-import torch
 from mpl_toolkits.mplot3d import axes3d
 from polytope import polytope
 
@@ -157,26 +156,32 @@ def _sort_xy(poly: polytope.Polytope) -> np.ndarray:
 class default_plt:
     def __init__(
         self,
-        savePath,
+        save_path,
         xlabel="",
         ylabel="",
         mode="jpg",
         with_gray=False,
         with_legend=True,
         with_grid=True,
+        with_3d=False,
     ):
-        self.savePath = savePath
+        self.save_path = save_path
         self.xlabel = xlabel
         self.ylabel = ylabel
         self.mode = mode
         self.with_gray = with_gray
         self.with_legend = with_legend
         self.with_grid = with_grid
+        self.subplots_kwargs = {}
+        self.with_3d = with_3d
+        if with_3d:
+            self.subplots_kwargs["projection"] = "3d"
 
     def __enter__(self):
-        fig = plt.figure(0, figsize=(8, 7), dpi=600)
-        self.ax = fig.subplots()
+        fig = plt.figure(0, figsize=(7, 7), dpi=600)
+        self.ax = fig.add_subplot(projection="3d") if self.with_3d else fig.subplots()
         self.ax.cla()
+        self.ax.set_aspect(aspect="equal")
         if not self.with_gray:
             self.ax.patch.set_facecolor("w")
         self.ax.tick_params(labelsize=15)
@@ -191,18 +196,19 @@ class default_plt:
         return self.ax
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        plt.savefig(self.savePath, dpi=600, format=f"{self.mode}")
+        plt.savefig(self.save_path, dpi=600, format=f"{self.mode}")
         plt.clf()
         plt.close()
 
 
 def default_subplots(
-    savePath,
+    save_path,
     xlabel="",
     ylabel="",
-    mode="png",
+    mode="jpg",
     with_gray=False,
     with_legend=True,
     with_grid=True,
+    with_3d=False,
 ):
-    return default_plt(savePath, xlabel, ylabel, mode, with_gray, with_legend, with_grid)
+    return default_plt(save_path, xlabel, ylabel, mode, with_gray, with_legend, with_grid, with_3d)

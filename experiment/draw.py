@@ -3,13 +3,14 @@ import os
 from typing import Callable, Dict, List, Tuple
 
 import matplotlib
+import matplotlib.axis
 import matplotlib.pyplot as plt
 import numpy as np
 import polytope as pc
 import torch
 
 from torchays import nn
-from torchays.graph import COLOR, color, plot_regions, plot_regions_3d
+from torchays.graph import COLOR, color, plot_regions, plot_regions_3d, default_subplots
 
 
 def bar(
@@ -43,6 +44,7 @@ class DrawRegionImage:
         n_classes=2,
         bounds=(-1, 1),
         device=torch.device("cpu"),
+        with_ticks=True,
     ) -> None:
         self.region_num = region_num
         self.funcs = funcs
@@ -54,6 +56,7 @@ class DrawRegionImage:
         self.bounds = bounds
         self.min_bound, self.max_bound = bounds
         self.device = device
+        self.with_ticks = with_ticks
 
     def draw(self, img_3d: bool = False):
         draw_funs = [self.draw_region_img, self.draw_region_img_result]
@@ -65,77 +68,58 @@ class DrawRegionImage:
             except Exception as e:
                 print(f"Warning: {draw_fun.__name__} is not supported. Error: {e}")
 
-    def draw_region_img(self, fileName="region_img.png"):
-        fig = plt.figure(0, figsize=(8, 7), dpi=600)
-        ax = fig.subplots()
-        ax.cla()
-        ax.tick_params(labelsize=15)
-        plot_regions(
-            self.funcs,
-            self.regions,
-            ax=ax,
-            color=color,
-            edgecolor="gray",
-            linewidth=0.1,
-            xlim=self.bounds,
-            ylim=self.bounds,
-        )
-        plt.savefig(os.path.join(self.save_dir, fileName))
-        plt.clf()
-        plt.close()
+    def draw_region_img(self, file_name="region_img.png"):
+        with self._ax(file_name) as ax:
+            plot_regions(
+                self.funcs,
+                self.regions,
+                ax=ax,
+                color=color,
+                edgecolor="gray",
+                linewidth=0.1,
+                xlim=self.bounds,
+                ylim=self.bounds,
+            )
+            self._set_axis(ax)
 
     def _z_fun(self, xy: np.ndarray) -> Tuple[np.ndarray, int]:
         xy = torch.from_numpy(xy).to(self.device).float()
         z: torch.Tensor = self.net(xy)
         return z.cpu().numpy(), range(self.n_classes)
 
-    def draw_region_img_3d(self, fileName="region_img_3d.png"):
-        fig = plt.figure(0, figsize=(8, 7), dpi=600)
-        ax: plt.Axes = fig.add_subplot(projection="3d")
-        ax.cla()
-        ax.tick_params(labelsize=15)
-        plot_regions_3d(
-            self.funcs,
-            self.regions,
-            z_fun=self._z_fun,
-            ax=ax,
-            alpha=0.8,
-            color=color,
-            edgecolor="grey",
-            linewidth=0.2,
-            xlim=self.bounds,
-            ylim=self.bounds,
-        )
-        plt.savefig(os.path.join(self.save_dir, fileName))
-        plt.clf()
-        plt.close()
-
-    def draw_region_img_result(self, color_bar: bool = False, fileName: str = "region_img_result.png"):
-        fig = plt.figure(0, figsize=(8, 7), dpi=600)
-        ax = fig.subplots()
-        ax.cla()
-        ax.tick_params(labelsize=15)
-        img = self.__draw_hot(ax)
-        for i in range(self.region_num):
-            func, area = self.funcs[i], self.regions[i]
-            func = -area.reshape(-1, 1) * func
-            A, B = func[:, :-1], -func[:, -1]
-            p = pc.Polytope(A, B)
-            p.plot(
-                ax,
-                color="w",
-                alpha=0.1,
-                linestyle='-',
-                linewidth=0.3,
-                edgecolor='black',
+    def draw_region_img_3d(self, file_name="region_img_3d.png"):
+        with self._ax(file_name, with_3d=True) as ax:
+            plot_regions_3d(
+                self.funcs,
+                self.regions,
+                z_fun=self._z_fun,
+                ax=ax,
+                alpha=0.8,
+                color=color,
+                edgecolor="grey",
+                linewidth=0.2,
+                xlim=self.bounds,
+                ylim=self.bounds,
             )
-        ax.set_xlim(*self.bounds)
-        ax.set_ylim(*self.bounds)
-        if color_bar:
-            fig.colorbar(img)
-        plt.savefig(os.path.join(self.save_dir, fileName))
-        plt.clf()
-        plt.close()
+            self._set_axis(ax)
+
+    def draw_region_img_result(self, color_bar: bool = False, file_name: str = "region_img_result.png"):
+        with self._ax(file_name) as ax:
+            img = self.__draw_hot(ax)
+            plot_regions(
+                self.funcs,
+                self.regions,
+                ax=ax,
+                color=lambda _: "w",
+                alpha=0.1,
+                edgecolor="black",
+                linewidth=0.3,
+                xlim=self.bounds,
+                ylim=self.bounds,
+            )
+            if color_bar:
+                ax.get_figure().colorbar(img, ax=ax)
+            self._set_axis(ax)
 
     def __draw_hot(self, ax):
         num = 1000
@@ -166,3 +150,13 @@ class DrawRegionImage:
         data = np.vstack((X1, X2)).transpose()
         data = torch.from_numpy(data).to(self.device)
         return data
+
+    def _path(self, file_name: str) -> str:
+        return os.path.join(self.save_dir, file_name)
+
+    def _ax(self, file_name: str, with_3d=False):
+        return default_subplots(self._path(file_name), with_legend=False, with_grid=False, with_3d=with_3d)
+
+    def _set_axis(self, ax: plt.Axes):
+        if not self.with_ticks:
+            ax.tick_params(which="both", colors="w")

@@ -5,7 +5,7 @@ from copy import deepcopy
 from logging import Logger
 from multiprocessing.pool import AsyncResult
 from multiprocessing.reduction import ForkingPickler
-from typing import Callable, Deque, Tuple
+from typing import Callable, Deque, List, Tuple
 
 import numpy as np
 import torch
@@ -298,7 +298,7 @@ class CPA:
         intersect_funs = torch.stack(intersect_funs, dim=0)
         return intersect_funs
 
-    def _optimize_child_region(self, p_cpa: CPAFunc, c_funcs: torch.Tensor, c_region: torch.Tensor) -> Tuple[CPAFunc, torch.Tensor, list]:
+    def _optimize_child_region(self, p_cpa: CPAFunc, c_funcs: torch.Tensor, c_region: torch.Tensor) -> Tuple[CPAFunc, torch.Tensor, List[torch.Tensor]]:
         """
         1. Check if the region is existed.
         2. Get the neighbor regions and the functions of the region edges.;
@@ -342,9 +342,9 @@ class CPA:
         constraint_funcs: torch.Tensor,
         c_region: torch.Tensor,
         c_inner_point: torch.Tensor,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[torch.Tensor]]:
         """Get the bound hyperplanes which can filter the same regions, and find the neighbor regions."""
-        neighbor_regions = []
+        neighbor_regions: List[torch.Tensor] = list()
         filter_region = torch.zeros_like(c_region).type(torch.int8)
 
         optim_funcs, optim_x = constraint_funcs.numpy(), c_inner_point.double().numpy()

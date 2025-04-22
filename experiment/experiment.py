@@ -271,7 +271,18 @@ class CPAs(_cpa):
                 if self.is_draw:
                     draw_dir = os.path.join(save_dir, f"draw-region-{depth}")
                     os.makedirs(draw_dir, exist_ok=True)
-                    dri = DrawRegionImage(count, handler.funs, handler.regions, handler.points, draw_dir, net, n_classes, bounds=self.bounds, device=self.device)
+                    dri = DrawRegionImage(
+                        count,
+                        handler.funs,
+                        handler.regions,
+                        handler.points,
+                        draw_dir,
+                        net,
+                        n_classes,
+                        bounds=self.bounds,
+                        device=self.device,
+                        with_ticks=True,
+                    )
                     dri.draw(self.is_draw_3d)
                 if self.is_hpas:
                     hpas = HyperplaneArrangements(save_dir, handler.hyperplane_arrangements, self.bounds)
