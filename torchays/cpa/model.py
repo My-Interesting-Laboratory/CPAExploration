@@ -25,9 +25,7 @@ class ProjectWrapper(Model):
     def __init__(
         self,
         model: Model,
-        # 需要投影的维度
         proj_dims: tuple | None = None,
-        # 非投影维度的其他切面的值
         proj_values: torch.Tensor = None,
     ):
         super().__init__()
@@ -48,9 +46,9 @@ class ProjectWrapper(Model):
         _bias = proj_values.view(-1).detach().float()
         for i in range(num_proj_dims):
             dim = proj_dims[i]
-            # 投影层bias为0, 对应的权重某个值的权重为1；
+            # bias is 0, weight is 1 for project dim.
             _weight[dim][i] = 1
-            # 非投影层weight为0，bias为输入值；
+            # others, weight is 0，bias is input；
             _bias[dim] = 0
         self.wrapper_layers.weight = Parameter(_weight)
         self.wrapper_layers.bias = Parameter(_bias)

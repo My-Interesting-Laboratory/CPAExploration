@@ -103,7 +103,7 @@ class Train(_base):
 
     def run(self):
         net, dataset, _ = self._init_model()
-        train_loader = data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        train_loader = data.DataLoader(dataset, batch_size=self.batch_size, num_workers=2, shuffle=True, pin_memory=True)
         total_step = math.ceil(len(dataset) / self.batch_size)
 
         optim = torch.optim.Adam(net.parameters(), lr=self.lr, weight_decay=0, betas=[0.9, 0.999])
@@ -281,20 +281,21 @@ class CPAs(_cpa):
                         n_classes,
                         bounds=self.bounds,
                         device=self.device,
-                        with_ticks=True,
+                        with_ticks=False,
                     )
                     dri.draw(self.is_draw_3d)
                 if self.is_hpas:
                     hpas = HyperplaneArrangements(save_dir, handler.hyperplane_arrangements, self.bounds)
                     hpas.run(is_draw=self.is_draw_hpas, is_statistic=self.is_statistic_hpas)
-                data_dict = {
-                    "funcs": handler.funs,
-                    "regions": handler.regions,
-                    "points": handler.points,
-                    "regionNum": count,
-                    "accuracy": acc,
-                }
-                torch.save(data_dict, os.path.join(save_dir, "net_regions.pkl"))
+                if handler is not None:
+                    data_dict = {
+                        "funcs": handler.funs,
+                        "regions": handler.regions,
+                        "points": handler.points,
+                        "regionNum": count,
+                        "accuracy": acc,
+                    }
+                    torch.save(data_dict, os.path.join(save_dir, "net_regions.pkl"))
                 result = {"regions": count, "accuracy": f"{acc:.4f}"}
                 with open(os.path.join(save_dir, "results.json"), "w") as w:
                     json.dump(result, w)
@@ -333,7 +334,6 @@ class Points(_cpa):
         cpa = CPA(device=self.device)
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
-            # 在不同epoch下
             print(f"Action: Point Distance ....")
             for model_name in model_list:
                 if self._is_continue(model_name):
@@ -344,7 +344,6 @@ class Points(_cpa):
                 net.load_state_dict(torch.load(os.path.join(self.model_dir, model_name), weights_only=False))
                 net.to(self.device)
                 logger = get_logger(f"region-{os.path.splitext(model_name)[0]}", os.path.join(save_dir, "points.log"))
-                # 获取每个数据，在当前父区域下超平面的距离
                 values: Dict[int, Neurals] = dict()
                 i = 0
                 for point, _ in dataloader:

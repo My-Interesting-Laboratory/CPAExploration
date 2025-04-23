@@ -45,20 +45,19 @@ def proj_net(
 
 def dataset():
     root: str = os.path.join(PATH.DIR, PATH.TAG) if PATH.TAG is not None and len(PATH.TAG) > 0 else PATH.DIR
-    dataset = None
     if GLOBAL.TYPE == TYPE.Moon:
-        dataset = Moon(root=root, n_samples=TOY.N_SAMPLES, noise=TOY.NOISE, random_state=COMMON.SEED, bias=TOY.BIAS)
+        return Moon(root=root, n_samples=TOY.N_SAMPLES, noise=TOY.NOISE, random_state=COMMON.SEED, bias=TOY.BIAS)
     if GLOBAL.TYPE == TYPE.GaussianQuantiles:
-        dataset = GaussianQuantiles(root=root, n_samples=TOY.N_SAMPLES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
+        return GaussianQuantiles(root=root, n_samples=TOY.N_SAMPLES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
     if GLOBAL.TYPE == TYPE.Random:
-        dataset = Random(root=root, n_classes=TOY.N_CLASSES, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, random_state=COMMON.SEED, bias=TOY.BIAS)
+        return Random(root=root, n_classes=TOY.N_CLASSES, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, random_state=COMMON.SEED, bias=TOY.BIAS)
     if GLOBAL.TYPE == TYPE.Classification:
-        dataset = Classification(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
+        return Classification(root=root, n_samples=TOY.N_SAMPLES, in_features=TOY.IN_FEATURES, n_classes=TOY.N_CLASSES, bias=TOY.BIAS, random_state=COMMON.SEED)
     if GLOBAL.TYPE == TYPE.MNIST:
-        dataset = Mnist(root, MNIST.DOWNLOAD)
+        return Mnist(root, MNIST.DOWNLOAD)
     if GLOBAL.TYPE == TYPE.CIFAR10:
-        dataset = cifar.Cifar10(root, CIFAR10.DOWNLOAD)
-    return dataset
+        return cifar.Cifar10(root, CIFAR10.DOWNLOAD)
+    return None
 
 
 def net():
@@ -67,7 +66,7 @@ def net():
         if GLOBAL.TYPE == TYPE.MNIST:
             # LeNet
             model = LeNet()
-        if GLOBAL.TYPE == TYPE.CIFAR10:
+        elif GLOBAL.TYPE == TYPE.CIFAR10:
             # CIFARNet
             model = CIFARNet(CIFAR10.NORM_LAYER, GLOBAL.NAME)
         else:
@@ -92,7 +91,7 @@ def print_cfg():
     print(f"Dataset: {GLOBAL.TYPE}")
     if GLOBAL.TYPE == TYPE.MNIST:
         print(f"Net: LeNet")
-    if GLOBAL.TYPE == TYPE.CIFAR10:
+    elif GLOBAL.TYPE == TYPE.CIFAR10:
         print(f"Net: CIFARNet")
         print(f"|   Norm Layer: {CIFAR10.NORM_LAYER.__name__}")
     else:
