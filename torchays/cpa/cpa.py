@@ -17,7 +17,7 @@ from ..utils import get_logger
 from .handler import BaseHandler
 from .model import Model
 from .optimization import cheby_ball, lineprog_intersect
-from .regions import CPACache, CPAFunc, CPAHandler, CPASet, WapperRegion
+from .regions import CPAFunc, CPAHandler, CPASet, WapperRegion
 from .util import check_point, find_projection, generate_bound_regions, get_regions, log_time, vertify
 
 
@@ -104,6 +104,11 @@ class CPA:
         *,
         bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        funcs: affine functions which constructs the region.
+        region: the funcs > 0?
+        neural_funcs: all neural functions in the parent region.
+        """
         # Initialize the parameters
         net.origin_size = point.size()
         dim = net.origin_size.numel()
@@ -116,9 +121,6 @@ class CPA:
         self.logger.info("Start Get point cpa.")
         point_cpa, neural_funcs = self._get_point_cpa(net, cpa_set, cpa_handler)
         self.logger.info(f"End Get point cpa.")
-        # funcs: affine functions which constructs the region.
-        # region: define weather the funcs > 0
-        # neural_funcs: all neural functions in the parent region.
         return point_cpa.funcs, point_cpa.region, neural_funcs
 
     def _get_point_cpa(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> Tuple[CPAFunc, torch.Tensor]:

@@ -94,3 +94,68 @@ class CIFARNet(Model):
         except Exception as _:
             self._change_norm(nn.Norm2d)
             return super().load_state_dict(state_dict, strict, assign)
+
+
+class CIFARLinearNet(Model):
+    def __init__(
+        self,
+        norm_layer=nn.BatchNorm1d,
+        name: str = "CIFARLinearNet",
+    ):
+        super().__init__()
+        self.name = name
+        self.n_relu = 2
+        self.flatten = nn.Flatten(1)
+        self.fc1 = nn.Linear(3 * 32 * 32, 512)
+        self.norm1 = norm_layer(512)
+
+        self.fc2 = nn.Linear(512, 256)
+        self.norm2 = norm_layer(256)
+
+        self.fc3 = nn.Linear(256, 128)
+        self.norm3 = norm_layer(128)
+
+        self.fc4 = nn.Linear(128, 10)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.flatten(x)
+
+        x = self.fc1(x)
+        x = self.norm1(x)
+        x = self.relu(x)
+
+        x = self.fc2(x)
+        x = self.norm2(x)
+        x = self.relu(x)
+
+        x = self.fc3(x)
+        x = self.norm3(x)
+        x = self.relu(x)
+
+        x = self.fc4(x)
+        return x
+
+    def forward_layer(self, x, depth):
+        x = self.flatten(x)
+
+        x = self.fc1(x)
+        x = self.norm1(x)
+        if depth == 0:
+            return x
+        x = self.relu(x)
+
+        x = self.fc2(x)
+        x = self.norm2(x)
+        if depth == 1:
+            return x
+        x = self.relu(x)
+
+        x = self.fc3(x)
+        x = self.norm3(x)
+        if depth == 2:
+            return x
+        x = self.relu(x)
+
+        x = self.fc4(x)
+        return x

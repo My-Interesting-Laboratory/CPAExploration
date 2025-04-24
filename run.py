@@ -8,7 +8,7 @@ from config import ANALYSIS, CIFAR10, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, T
 from dataset import Classification, Dataset, GaussianQuantiles, Mnist, Moon, Random, cifar
 from experiment import Analysis, Experiment, TrainHandler
 from torchays.cpa import Model, ProjectWrapper
-from torchays.models import CIFARNet, LeNet, TestNetLinear
+from torchays.models import CIFARLinearNet, CIFARNet, LeNet, TestNetLinear
 
 
 def init_fun(seed: int = 0):
@@ -65,13 +65,16 @@ def net():
     def wrapper(n_classes: int) -> Model:
         if GLOBAL.TYPE == TYPE.MNIST:
             # LeNet
-            model = LeNet()
+            return LeNet()
         elif GLOBAL.TYPE == TYPE.CIFAR10:
             # CIFARNet
-            model = CIFARNet(CIFAR10.NORM_LAYER, GLOBAL.NAME)
+            if CIFAR10.LINEAR:
+                return CIFARLinearNet(CIFAR10.NORM_LAYER, GLOBAL.NAME)
+            return CIFARNet(CIFAR10.NORM_LAYER, GLOBAL.NAME)
+
         else:
             # Toy
-            model = TestNetLinear(
+            return TestNetLinear(
                 in_features=TOY.IN_FEATURES,
                 layers=TESTNET.N_LAYERS,
                 name=GLOBAL.NAME,
@@ -84,28 +87,37 @@ def net():
 
 
 def print_cfg():
-    print("------------------")
+    print("-----------------------------------------------")
     print("Configuration:")
     print(f"Name: {GLOBAL.NAME}")
     print(f"Random Seed: {COMMON.SEED}")
     print(f"Dataset: {GLOBAL.TYPE}")
+    print(f"GPU_ID: {COMMON.GPU_ID}")
     if GLOBAL.TYPE == TYPE.MNIST:
         print(f"Net: LeNet")
     elif GLOBAL.TYPE == TYPE.CIFAR10:
         print(f"Net: CIFARNet")
-        print(f"|   Norm Layer: {CIFAR10.NORM_LAYER.__name__}")
+        print(f"|   Linear Model: {CIFAR10.LINEAR}")
+        print(f"|   NormLayer: {CIFAR10.NORM_LAYER.__name__}")
     else:
         print(f"|   n_samples: {TOY.N_SAMPLES}")
         print(f"|   n_class: {TOY.N_CLASSES}")
         print(f"|   in_feature: {TOY.IN_FEATURES}")
         print(f"Net: TestNetLinear")
         print(f"|   Layers: {TESTNET.N_LAYERS}")
-        print(f"|   Norm Layer: {TESTNET.NORM_LAYER.__name__}")
+        print(f"|   NormLayer: {TESTNET.NORM_LAYER.__name__}")
     print(f"Action:")
     print(f"|   Train: {TRAIN.TRAIN}")
     print(f"|   CPAS: {EXPERIMENT.CPAS}")
+    print(f"|       WORKS: {EXPERIMENT.WORKERS}")
+    print(f"|       WITH_DRAW: {EXPERIMENT.WITH_DRAW}")
+    print(f"|       WITH_DRAW_3D: {EXPERIMENT.WITH_DRAW_3D}")
+    print(f"|       WITH_DRAW_HPAS: {EXPERIMENT.WITH_DRAW_HPAS}")
+    print(f"|       WITH_STATISTIC_HPAS: {EXPERIMENT.WITH_STATISTIC_HPAS}")
     print(f"|   Point: {EXPERIMENT.POINT}")
-    print("------------------")
+    print(f"|   Analysis: {ANALYSIS.WITH_ANALYSIS}")
+    print(f"|   Draw dataset: {ANALYSIS.WITH_DATASET}")
+    print("-----------------------------------------------")
 
 
 def run(

@@ -43,6 +43,7 @@ class MNIST:
 
 class CIFAR10:
     DOWNLOAD: bool = True
+    LINEAR: bool = False
     NORM_LAYER = nn.BatchNorm2d
 
 
@@ -60,7 +61,7 @@ class GLOBAL:
 class TRAIN:
     TRAIN: bool = True
     MAX_EPOCH: int = 10000
-    SAVE_EPOCH: List[int] = [100, 500, 1000, 2500, 5000, 10000]
+    SAVE_EPOCH: List[int] = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 500, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 20000, 30000]
     BATCH_SIZE: int = 64
     LR: float = 1e-3
 

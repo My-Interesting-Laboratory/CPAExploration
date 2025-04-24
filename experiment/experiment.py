@@ -251,8 +251,10 @@ class CPAs(_cpa):
                 os.makedirs(save_dir, exist_ok=True)
                 net.load_state_dict(torch.load(os.path.join(self.model_dir, model_name), weights_only=False))
                 net.to(self.device)
+                # Accuracy
                 acc = self.val_net(net, val_dataloader).cpu().numpy()
                 print(f"Accuracy: {acc:.4f}")
+                # CPA
                 handler = Handler() if self.is_draw or self.is_hpas else None
                 logger = get_logger(
                     f"region-{os.path.splitext(model_name)[0]}",
@@ -287,6 +289,9 @@ class CPAs(_cpa):
                 if self.is_hpas:
                     hpas = HyperplaneArrangements(save_dir, handler.hyperplane_arrangements, self.bounds)
                     hpas.run(is_draw=self.is_draw_hpas, is_statistic=self.is_statistic_hpas)
+                result = {"regions": count, "accuracy": f"{acc:.4f}"}
+                with open(os.path.join(save_dir, "results.json"), "w") as w:
+                    json.dump(result, w)
                 if handler is not None:
                     data_dict = {
                         "funcs": handler.funs,
@@ -296,9 +301,6 @@ class CPAs(_cpa):
                         "accuracy": acc,
                     }
                     torch.save(data_dict, os.path.join(save_dir, "net_regions.pkl"))
-                result = {"regions": count, "accuracy": f"{acc:.4f}"}
-                with open(os.path.join(save_dir, "results.json"), "w") as w:
-                    json.dump(result, w)
 
 
 class Points(_cpa):

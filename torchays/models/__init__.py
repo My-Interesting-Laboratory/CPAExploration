@@ -1,4 +1,4 @@
-from .cifar import CIFARNet
+from .cifar import CIFARNet, CIFARLinearNet
 from .mnist import LeNet
 from .testnet import TestNetLinear, TestResNet
 
@@ -7,4 +7,5 @@ __all__ = [
     "TestNetLinear",
     "LeNet",
     "CIFARNet",
+    "CIFARLinearNet",
 ]
