@@ -5,15 +5,11 @@ from typing import Callable, List, Tuple, TypeAlias
 import torch
 
 one = torch.ones(1)
-zero = torch.zeros(1)
 
 
-def _get_regions(x: torch.Tensor, functions: torch.Tensor, eps: float = 0) -> torch.Tensor:
+def _get_regions(x: torch.Tensor, functions: torch.Tensor) -> torch.Tensor:
     W, B = functions[:, :-1], functions[:, -1]
-    y = x @ W.T + B
-    if eps >= 0:
-        y = torch.where(y.abs() <= eps, zero, y)
-    return torch.sign(y)
+    return torch.sign(x @ W.T + B)
 
 
 def get_regions(x: torch.Tensor, functions: torch.Tensor) -> torch.Tensor:
@@ -22,11 +18,19 @@ def get_regions(x: torch.Tensor, functions: torch.Tensor) -> torch.Tensor:
     return regions
 
 
+def check_point(point: torch.Tensor, ws: torch.Tensor) -> bool:
+    if ws == 0:
+        return False
+    if torch.isnan(point).all() or torch.isinf(point).all():
+        return False
+    return True
+
+
 def vertify(x: torch.Tensor, functions: torch.Tensor, region: torch.Tensor) -> bool:
     """
     Verify that the current point x is in the region
     """
-    point = _get_regions(x, functions, eps=1e-6)
+    point = _get_regions(x, functions)
     return -1 not in region * point
 
 
@@ -35,8 +39,8 @@ def _distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> Tuple[torch.Tensor,
     # hyperplane: [n, d+1] (w: [n, d], b: [n])
     W, B = hyperplanes[:, :-1], hyperplanes[:, -1]
     v = x @ W.T + B
-    w_s = torch.sum(torch.square(W), dim=1) + 1e-10
-    d = v / w_s
+    w_s = torch.sum(torch.square(W), dim=1)
+    d = v / (w_s.sqrt() + 1e-16)
     # return: [n]
     return d, v, w_s, W, B
 
@@ -46,14 +50,14 @@ def distance(x: torch.Tensor, hyperplanes: torch.Tensor) -> Tuple[torch.Tensor, 
     return d.abs(), v.abs(), w_s
 
 
-def find_projection(x: torch.Tensor, hyperplanes: torch.Tensor) -> torch.Tensor:
+def find_projection(x: torch.Tensor, hyperplanes: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Find a point on the hyperplane that passes through x and is perpendicular to the hyperplane.
     """
-    d, _, _, W, _ = _distance(x, hyperplanes)
-    # p_point: [n, d]
-    p_point = x - W * d.view(-1, 1)
-    return p_point
+    _, v, w_s, W, _ = _distance(x, hyperplanes)
+    t = (v / (w_s + 1e-16)).view(-1, 1)
+    p_point = x - W * t
+    return p_point, w_s
 
 
 BoundTypes: TypeAlias = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Tuple]

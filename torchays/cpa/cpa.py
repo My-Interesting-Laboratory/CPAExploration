@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import time
 from collections import deque
 from copy import deepcopy
 from logging import Logger
@@ -17,7 +18,7 @@ from .handler import BaseHandler
 from .model import Model
 from .optimization import cheby_ball, lineprog_intersect
 from .regions import CPACache, CPAFunc, CPAHandler, CPASet, WapperRegion
-from .util import find_projection, generate_bound_regions, get_regions, log_time, vertify
+from .util import check_point, find_projection, generate_bound_regions, get_regions, log_time, vertify
 
 
 class CPA:
@@ -90,8 +91,9 @@ class CPA:
         cpa_set.register(cpa)
         # Start to get the NN regions.
         self.logger.info("Start Get region number.")
+        start = time.time()
         counts = self._get_counts(net, cpa_set, cpa_handler)
-        self.logger.info(f"CPAFunc counts: {counts}.")
+        self.logger.info(f"CPAFunc counts: {counts}. Times: {time.time()-start}s")
         return counts
 
     def _start_point(
@@ -243,7 +245,7 @@ class CPA:
             functions[i] = _scale_function(functions[i])
         return functions
 
-    @log_time("handler region", 2, logging=True)
+    @log_time("Handler region", 2, logging=False)
     def _handler_region(
         self,
         p_cpa: CPAFunc,
@@ -255,15 +257,16 @@ class CPA:
         """
         c_cpa_set, cpa_cache = CPASet(), cpa_handler.cpa_caches()
         counts, n_regions = 0, 0
-        intersect_funcs = self._find_intersect(p_cpa, c_funcs)
+        intersect_funcs, inner_points = self._find_intersect(p_cpa, c_funcs)
         if intersect_funcs is None:
             n_regions = 1
             c_cpa = CPAFunc(p_cpa.funcs, p_cpa.region, p_cpa.point, p_cpa.depth + 1)
             counts += self._nn_region_counts(c_cpa, c_cpa_set.register, cpa_cache.cpa)
         else:
-            c_regions = get_regions(p_cpa.point.reshape(1, -1), intersect_funcs)
+            inner_points: torch.Tensor = torch.cat((inner_points, p_cpa.point.reshape(1, -1)))
+            c_regions = get_regions(inner_points, intersect_funcs)
             # Register some regions in WapperRegion for iterate.
-            layer_regions = WapperRegion(c_regions[0])
+            layer_regions = WapperRegion(c_regions)
             for c_region in layer_regions:
                 # Check and get the child region. Then, the neighbor regions will be found.
                 c_cpa, filter_region, neighbor_regions = self._optimize_child_region(p_cpa, intersect_funcs, c_region)
@@ -281,22 +284,26 @@ class CPA:
         cpa_cache.hyperplane(p_cpa, c_funcs, intersect_funcs, n_regions)
         return counts, c_cpa_set, cpa_cache
 
-    @log_time("find intersect", 2, logging=False)
+    @log_time("Find intersect", 2, logging=False)
     def _find_intersect(self, p_cpa: CPAFunc, funcs: torch.Tensor) -> Tuple[torch.Tensor | None, torch.Tensor | None]:
         """Find the hyperplanes intersecting the region."""
-        intersect_funs = []
+        intersect_idx, points_idx = [], []
         optim_funcs, optim_x = funcs.numpy(), p_cpa.point.double().numpy()
         pn_funcs = (p_cpa.region.view(-1, 1) * p_cpa.funcs).numpy()
-        p_points = find_projection(p_cpa.point, funcs)
+        p_points, w_s = find_projection(p_cpa.point, funcs)
         for i in range(funcs.size(0)):
-            if torch.isnan(p_points[i]).all() or torch.isinf(p_points[i]).all():
+            if not check_point(p_points[i], w_s[i]):
                 continue
-            if vertify(p_points[i], p_cpa.funcs, p_cpa.region) or lineprog_intersect(optim_funcs[i], pn_funcs, optim_x, self.o_bounds):
-                intersect_funs.append(funcs[i])
-        if len(intersect_funs) == 0:
-            return None
-        intersect_funs = torch.stack(intersect_funs, dim=0)
-        return intersect_funs
+            if vertify(p_points[i], p_cpa.funcs, p_cpa.region):
+                points_idx.append(i)
+                intersect_idx.append(i)
+                continue
+            if lineprog_intersect(optim_funcs[i], pn_funcs, optim_x, self.o_bounds):
+                intersect_idx.append(i)
+        if len(intersect_idx) == 0:
+            return None, None
+        intersect_funs, inner_points = funcs[intersect_idx], p_points[points_idx]
+        return intersect_funs, inner_points
 
     def _optimize_child_region(self, p_cpa: CPAFunc, c_funcs: torch.Tensor, c_region: torch.Tensor) -> Tuple[CPAFunc, torch.Tensor, List[torch.Tensor]]:
         """
@@ -315,7 +322,7 @@ class CPA:
         c_cpa = CPAFunc(c_edge_funcs, c_edge_region, c_inner_point, p_cpa.depth + 1)
         return c_cpa, filter_region, neighbor_regions
 
-    @log_time("find child region inner point", 2, False)
+    @log_time("Find inner point", 2, False)
     def _find_region_inner_point(self, functions: torch.Tensor) -> torch.Tensor:
         """
         Calculate the max radius of the insphere in the region to make the radius less than the distance of the insphere center to the all functions
@@ -334,7 +341,7 @@ class CPA:
             return None
         return torch.from_numpy(x).float()
 
-    @log_time("optimize child region", 2, False)
+    @log_time("Optimize region", 2, False)
     def _optimize_region(
         self,
         funcs: torch.Tensor,
@@ -348,7 +355,7 @@ class CPA:
         filter_region = torch.zeros_like(c_region).type(torch.int8)
 
         optim_funcs, optim_x = constraint_funcs.numpy(), c_inner_point.double().numpy()
-        p_points = find_projection(c_inner_point, funcs)
+        p_points, _ = find_projection(c_inner_point, funcs)
         c_edge_idx, redundant_idx = [], []
         # TODO: Too much time spent.
         for i in range(optim_funcs.shape[0]):
@@ -361,7 +368,6 @@ class CPA:
                     redundant_idx.append(i)
                     continue
             c_edge_idx.append(i)
-
         for i in c_edge_idx:
             if i >= c_region.shape[0]:
                 continue

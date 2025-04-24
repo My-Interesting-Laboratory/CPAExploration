@@ -61,12 +61,12 @@ class WapperRegion:
     # If this value is reached, the calculation speed will slow down.
     _upper = 32767
 
-    def __init__(self, region: torch.Tensor):
+    def __init__(self, regions: torch.Tensor):
         self.filters: Deque[torch.Tensor] = deque()
         self.filters.appendleft(torch.Tensor().type(torch.int8))
         self.regions: Deque[torch.Tensor] = deque()
-        self._up_size = floor(self._upper / region.size(0))
-        self.register(region)
+        self._up_size = floor(self._upper / regions.size(1))
+        self.extend(regions)
 
     def __iter__(self):
         return self
@@ -90,8 +90,7 @@ class WapperRegion:
             for filter in self.filters:
                 res = ((filter.abs() * region) - filter).abs().sum(dim=1)
                 if 0 in res:
-                    including = True
-                    break
+                    return True
             return including
         except:
             return False
