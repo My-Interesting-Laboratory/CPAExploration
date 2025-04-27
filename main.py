@@ -1,5 +1,7 @@
+import math
 from random import Random
-from typing import Any, Callable, List, Tuple
+import random
+from typing import Any, Callable, Iterable, List, Tuple
 
 import torch
 
@@ -11,16 +13,17 @@ from torchays import nn
 def config():
     COMMON.GPU_ID = 7
     TRAIN.TRAIN = False
-    TRAIN.MAX_EPOCH = 1000
-    TRAIN.LR = 1e-3
+    TRAIN.MAX_EPOCH = 5000
+    TRAIN.LR = 1e-4
 
-    EXPERIMENT.CPAS = False
+    EXPERIMENT.CPAS = True
     EXPERIMENT.WORKERS = 64
     EXPERIMENT.BOUND = (-1, 1)
 
     EXPERIMENT.WITH_DRAW = True
     EXPERIMENT.WITH_DRAW_3D = False
-    EXPERIMENT.WITH_DRAW = False
+    EXPERIMENT.WITH_DRAW_HPAS = False
+    EXPERIMENT.WITH_STATISTIC_HPAS = False
 
     ANALYSIS.WITH_DATASET = False
 
@@ -58,7 +61,7 @@ def lab1(
         TOY.IN_FEATURES = in_features
         TOY.N_CLASSES = n_classes
 
-        EXPERIMENT.WITH_DRAW_3D = True
+        EXPERIMENT.WITH_DRAW_3D = False if in_features > 2 else True
         EXPERIMENT.WITH_DRAW = False if in_features > 2 else True
         ANALYSIS.WITH_DATASET = False if in_features > 2 else True
 
@@ -85,7 +88,7 @@ def lab2(
         TESTNET.NORM_LAYER = norm_layer
 
         EXPERIMENT.WITH_DRAW_3D = True
-        EXPERIMENT.WITH_DRAW_HPAS = True
+        EXPERIMENT.WITH_DRAW_HPAS = False
         EXPERIMENT.WITH_STATISTIC_HPAS = True
 
         ANALYSIS.WITH_DATASET = True
@@ -98,12 +101,11 @@ def lab3(
     type: str,
     norm_layer,
     linear: bool,
-    batch_size: int = 64,
     proj_dim: Tuple[int] = None,
     proj_values: torch.Tensor = None,
 ):
     args = (name, type)
-    kwargs = {"batch_size": batch_size}
+    kwargs = {"batch_size": 256}
 
     def config_fn():
         PATH.TAG = "CPAExploration-lab3"
@@ -146,6 +148,26 @@ def lab4(
         EXPERIMENT.PROJ_VALUES = proj_values
 
     return config_fn
+
+
+def random_proj(input_size: torch.Size | Iterable[int], dims: int = 2, bound=(-1, 1)):
+    if isinstance(input_size, Iterable):
+        input_size = torch.Size(input_size)
+    kwargs = {}
+    numel = input_size.numel()
+    # proj_dim
+    proj_dim = []
+    for _ in range(dims):
+        while True:
+            dim = random.randint(0, numel)
+            if dim not in proj_dim:
+                proj_dim.append(dim)
+                break
+    kwargs["proj_dim"] = tuple(proj_dim)
+    # proj_values
+    upper, lower = max(bound), min(bound)
+    kwargs["proj_values"] = torch.rand(*input_size) * (upper - lower) + lower
+    return kwargs
 
 
 def main():
@@ -193,7 +215,6 @@ if __name__ == "__main__":
 
     # lab2：层级中，线性区域中穿越的超平面数量的分析
     lab2_conf = [
-        # TODO: 考虑实验设计
         # Moon基础模型分析
         lab2("Linear-[32,32,32]", TYPE.Moon, [32] * 3, nn.Norm1d),
         # 对深层次的模型的分析
@@ -204,31 +225,44 @@ if __name__ == "__main__":
         # 对深层次的模型的分析
         lab2("Linear-[32]x5", TYPE.Random, [32] * 5, nn.Norm1d),
         lab2("Linear-[32]x10", TYPE.Random, [32] * 10, nn.Norm1d),
+        # 64
+        # Moon基础模型分析
+        lab2("Linear-[64,64,64]", TYPE.Moon, [64] * 3, nn.Norm1d),
+        # 对深层次的模型的分析
+        lab2("Linear-[64]x5", TYPE.Moon, [64] * 5, nn.Norm1d),
+        lab2("Linear-[64]x10", TYPE.Moon, [64] * 10, nn.Norm1d),
+        # Random基础模型分析
+        lab2("Linear-[64,64,64]", TYPE.Random, [64] * 3, nn.Norm1d),
+        # 对深层次的模型的分析
+        lab2("Linear-[64]x5", TYPE.Random, [64] * 5, nn.Norm1d),
+        lab2("Linear-[64]x10", TYPE.Random, [64] * 10, nn.Norm1d),
     ]
 
     # lab3：CNN线性区域的投影面的分析，与splinecam不同；
     lab3_conf = [
         # CIFAI-10, Linear的投影.
-        lab3("CIFAR10-Linear", TYPE.CIFAR10, nn.Norm1d, True, 256, (1000, 2000), torch.zeros((3, 32, 32)) + 0.5),
+        *[lab3("CIFAR10-Linear", TYPE.CIFAR10, nn.Norm1d, linear=True, **random_proj((3, 32, 32))) for _ in range(10)],
         # CIFAR-10, CNN的投影.
-        lab3("CIFAR10-CNN", TYPE.CIFAR10, nn.Norm2d, False, 256, (1000, 2000), torch.zeros((3, 32, 32)) + 0.5),
+        *[lab3("CIFAR10-CNN", TYPE.CIFAR10, nn.Norm2d, linear=False, **random_proj((3, 32, 32))) for _ in range(10)],
         # MNIST, CNN的投影.
-        lab3("MNIST", TYPE.MNIST, nn.Norm2d, False, 256, (300, 400), torch.zeros((1, 28, 28)) + 0.5),
+        *[lab3("MNIST", TYPE.MNIST, nn.Norm2d, linear=False, **random_proj((1, 28, 28))) for _ in range(10)],
     ]
 
     # lab4：BN等神经网络模块对线性区域的影响的实验分析；
     lab4_conf = [
         # 普通神经网络
         lab4("Linear-[32,32,32]-batch", TYPE.Moon, nn.BatchNorm1d, n_layers=[32] * 3),
-        lab4("Linear-[32,32,32]-batch", TYPE.Random, nn.BatchNorm1d, n_layers=[32] * 3),
+        lab4("Linear-[32,32,32]-batch", TYPE.Moon, nn.BatchNorm1d, n_layers=[32] * 3),
+        lab4("Linear-[64,64,64]-batch", TYPE.Random, nn.BatchNorm1d, n_layers=[64] * 3),
+        lab4("Linear-[64,64,64]-batch", TYPE.Random, nn.BatchNorm1d, n_layers=[64] * 3),
         # CIFAR-10
-        lab4("CIFAR10-batch", TYPE.CIFAR10, nn.BatchNorm2d, batch_size=256, proj_dim=(1000, 2000), proj_values=torch.zeros((1, 28, 28)) + 0.5),
+        lab4("CIFAR10-batch", TYPE.CIFAR10, nn.BatchNorm2d, batch_size=256, proj_dim=(1000, 2000), proj_values=torch.zeros((3, 32, 32)) + 0.5),
     ]
 
     configs = [
-        *lab1_conf,
-        *lab2_conf,
-        *lab3_conf,
+        # *lab1_conf,
+        # *lab2_conf,
+        # *lab3_conf,
         *lab4_conf,
     ]
     for lab_config in configs:
