@@ -36,6 +36,7 @@ class ProjectWrapper(Model):
         if self._wrapper:
             self._input_size = proj_values.size()
             self.input_size = (len(proj_dims),)
+            self.proj_dim = proj_dims
             self.set_project(proj_dims, proj_values)
 
     def set_project(self, proj_dims: tuple | None, proj_values: torch.Tensor):

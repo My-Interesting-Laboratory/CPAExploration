@@ -1,20 +1,20 @@
-import math
-from random import Random
 import random
-from typing import Any, Callable, Iterable, List, Tuple
+from typing import Iterable, List, Tuple
 
 import torch
 
-from config import ANALYSIS, CIFAR10, COMMON, EXPERIMENT, GLOBAL, MNIST, PATH, TESTNET, TOY, TRAIN, TYPE
+from config import ANALYSIS, CIFAR10, COMMON, EXPERIMENT, GLOBAL, PATH, TESTNET, TOY, TRAIN, TYPE
 from run import dataset, net, proj_net, run
 from torchays import nn
 
 
 def config():
     COMMON.GPU_ID = 7
-    TRAIN.TRAIN = False
+
+    TRAIN.TRAIN = True
     TRAIN.MAX_EPOCH = 5000
     TRAIN.LR = 1e-4
+    TRAIN.SAVE_EPOCH = [1, 10, 50, 100, 200, 300, 500, 1000, 2000, 5000, 7500, 10000, 20000, 30000]
 
     EXPERIMENT.CPAS = True
     EXPERIMENT.WORKERS = 64
@@ -40,13 +40,15 @@ def set_config(
 
 
 def lab1(
-    name: str,
     type: str,
     n_layers: List[int],
-    norm_layer,
+    norm_layer=nn.Norm1d,
     in_features: int = 2,
     n_classes: int = 2,
 ):
+    name = f"Linear-{n_layers}".replace(" ", "")
+    if in_features > 2:
+        name += f"-feat_{in_features}"
     args = (name, type)
     kwargs = {}
 
@@ -110,6 +112,8 @@ def lab3(
     def config_fn():
         PATH.TAG = "CPAExploration-lab3"
         set_config(*args, **kwargs)
+        TRAIN.MAX_EPOCH = 500
+
         CIFAR10.NORM_LAYER = norm_layer
         CIFAR10.LINEAR = linear
         EXPERIMENT.PROJ_DIM = proj_dim
@@ -185,35 +189,45 @@ def main():
 if __name__ == "__main__":
     # lab1：深度和神经元和输入维度，如何影响到区域数量的. ReLU激活函数, 不考虑BN.
     lab1_conf = [
-        # 数据集Moon
-        # Base
-        lab1("Linear-[32,32,32]", TYPE.Moon, [32] * 3, nn.Norm1d),
-        # 1. 神经元相同, 深度的影响;
-        # 我们确保深度的构成是中间层神经元是最大的，依此递增后递减，不会出现夹杂情况
-        lab1("Linear-[16,32,32,16]", TYPE.Moon, [16, 32, 32, 16], nn.Norm1d),
-        lab1("Linear-[8,8,16,32,16,8,8]", TYPE.Moon, [8, 8, 16, 32, 16, 8, 8], nn.Norm1d),
-        # 2. 神经元相同, 宽度的影响(浅层, 中层, 深层);
-        lab1("Linear-[64,32,32]", TYPE.Moon, [64, 32, 16], nn.Norm1d),
-        lab1("Linear-[16,64,32]", TYPE.Moon, [16, 64, 32], nn.Norm1d),
-        lab1("Linear-[32,64,16]", TYPE.Moon, [32, 64, 16], nn.Norm1d),
-        lab1("Linear-[16,32,64]", TYPE.Moon, [16, 32, 64], nn.Norm1d),
-        # 数据集Random
-        # Base
-        lab1("Linear-[32,32,32]", TYPE.Random, [32] * 3, nn.Norm1d),
-        # 1. 神经元相同, 深度的影响;
-        lab1("Linear-[16,32,32,16]", TYPE.Random, [16, 32, 32, 16], nn.Norm1d),
-        lab1("Linear-[8,8,16,32,16,8,8]", TYPE.Random, [8, 8, 16, 32, 16, 8, 8], nn.Norm1d),
-        # 2. 深度相同, 宽度的影响(浅层, 中层, 深层);
-        lab1("Linear-[64,32,32]", TYPE.Random, [64, 32, 16], nn.Norm1d),
-        lab1("Linear-[16,64,32]", TYPE.Random, [16, 64, 32], nn.Norm1d),
-        lab1("Linear-[32,64,16]", TYPE.Random, [32, 64, 16], nn.Norm1d),
-        lab1("Linear-[16,32,64]", TYPE.Random, [16, 32, 64], nn.Norm1d),
-        # 3. 深度宽度相同, 输入维度的影响;
-        lab1("Linear-[32]x3-feat_3", TYPE.Random, [32] * 3, nn.Norm1d, 3),
-        lab1("Linear-[32]x3-feat_4", TYPE.Random, [32] * 3, nn.Norm1d, 4),
+        # ====================================================================
+        # Moon
+        # 1. 单层MLP情况下, 随着宽度增加, 区域数量的增长关系; (宽度于区域数量的关系)
+        *[lab1(TYPE.Moon, [16 * (2**i)]) for i in range(0, 6)],
+        # 2. 多层MLP情况下, 每一层神经元数量固定, 如何影响到区域数量;
+        *[lab1(TYPE.Moon, [16] * i) for i in range(2, 10)],
+        # 3. 多层MLP情况下, 随着某一层的宽度变动, 区域数量的增加关系;
+        *[lab1(TYPE.Moon, [16, 16 * (2**i)]) for i in range(0, 5)],
+        *[lab1(TYPE.Moon, [16 * (2**i), 16]) for i in range(0, 5)],
+        # ====================================================================
+        # Random-feat_4
+        # 1. 单层MLP情况下, 随着宽度增加, 区域数量的增长关系;
+        *[lab1(TYPE.Random, [16 * (2**i)]) for i in range(0, 6)],
+        # 2. 多层MLP情况下, 每一层神经元数量固定, 如何影响到区域数量;
+        *[lab1(TYPE.Random, [16] * i) for i in range(2, 10)],
+        # 3. 多层MLP情况下, 随着某一层的宽度变动, 区域数量的增加关系;
+        *[lab1(TYPE.Random, [16, 16 * (2**i)]) for i in range(0, 5)],
+        *[lab1(TYPE.Random, [16 * (2**i), 16]) for i in range(0, 5)],
+        # ====================================================================
+        # Random-feat_3
+        # 1. 单层MLP情况下, 随着宽度增加, 区域数量的增长关系;
+        *[lab1(TYPE.Random, [16 * (2**i)], in_features=3) for i in range(0, 2)],
+        # 2. 多层MLP情况下, 每一层神经元数量固定, 如何影响到区域数量;
+        *[lab1(TYPE.Random, [16] * i, in_features=3) for i in range(2, 4)],
+        # 3. 多层MLP情况下, 随着某一层的宽度变动, 区域数量的增加关系;
+        *[lab1(TYPE.Random, [16, 16 * (2**i)], in_features=3) for i in range(0, 1)],
+        *[lab1(TYPE.Random, [16 * (2**i), 16], in_features=3) for i in range(0, 1)],
+        # ====================================================================
+        # Random-feat_4
+        # 1. 单层MLP情况下, 随着宽度增加, 区域数量的增长关系;
+        *[lab1(TYPE.Random, [16 * (2**i)], in_features=4) for i in range(0, 2)],
+        # 2. 多层MLP情况下, 每一层神经元数量固定, 如何影响到区域数量;
+        *[lab1(TYPE.Random, [16] * i, in_features=4) for i in range(2, 4)],
+        # 3. 多层MLP情况下, 随着某一层的宽度变动, 区域数量的增加关系;
+        *[lab1(TYPE.Random, [16, 16 * (2**i)], in_features=4) for i in range(0, 1)],
+        *[lab1(TYPE.Random, [16 * (2**i), 16], in_features=4) for i in range(0, 1)],
     ]
 
-    # lab2：层级中，线性区域中穿越的超平面数量的分析
+    # lab2：层级中, 线性区域中穿越的超平面数量的分析;(再议)
     lab2_conf = [
         # Moon基础模型分析
         lab2("Linear-[32,32,32]", TYPE.Moon, [32] * 3, nn.Norm1d),
@@ -238,14 +252,12 @@ if __name__ == "__main__":
         lab2("Linear-[64]x10", TYPE.Random, [64] * 10, nn.Norm1d),
     ]
 
-    # lab3：CNN线性区域的投影面的分析，与splinecam不同；
+    # lab3：CNN线性区域的投影面的分析, 与splinecam不同;
     lab3_conf = [
         # CIFAI-10, Linear的投影.
         *[lab3("CIFAR10-Linear", TYPE.CIFAR10, nn.Norm1d, linear=True, **random_proj((3, 32, 32))) for _ in range(10)],
         # CIFAR-10, CNN的投影.
         *[lab3("CIFAR10-CNN", TYPE.CIFAR10, nn.Norm2d, linear=False, **random_proj((3, 32, 32))) for _ in range(10)],
-        # MNIST, CNN的投影.
-        *[lab3("MNIST", TYPE.MNIST, nn.Norm2d, linear=False, **random_proj((1, 28, 28))) for _ in range(10)],
     ]
 
     # lab4：BN等神经网络模块对线性区域的影响的实验分析；
@@ -260,10 +272,10 @@ if __name__ == "__main__":
     ]
 
     configs = [
-        # *lab1_conf,
+        *lab1_conf,
         # *lab2_conf,
-        # *lab3_conf,
-        *lab4_conf,
+        *lab3_conf,
+        # *lab4_conf,
     ]
     for lab_config in configs:
         lab_config()

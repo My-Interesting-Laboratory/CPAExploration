@@ -10,7 +10,7 @@ from torch.utils import data
 
 
 from torchays import nn
-from torchays.cpa import CPA, Model, distance
+from torchays.cpa import CPA, Model, distance, ProjectWrapper
 from torchays.utils import get_logger
 
 from .draw import DrawRegionImage
@@ -46,13 +46,16 @@ class _base:
     def _init_model(self):
         dataset, n_classes = self.dataset()
         net = self.net(n_classes, self.training).to(self.device)
-        self._init_dir(net.name)
+        self._init_dir(net)
         return net, dataset, n_classes
 
-    def _init_dir(self, name: str):
-        self.root_dir = os.path.join(self.save_dir, name)
+    def _init_dir(self, net: Model):
+        self.root_dir = os.path.join(self.save_dir, net.name)
         self.model_dir = os.path.join(self.root_dir, "model")
-        self.experiment_dir = os.path.join(self.root_dir, "experiment")
+        exp_dir = "experiment"
+        if isinstance(net, ProjectWrapper) and net.proj_dim is not None:
+            exp_dir = f"experiment-{net.proj_dim}".replace(" ", "")
+        self.experiment_dir = os.path.join(self.root_dir, exp_dir)
         for dir in [
             self.root_dir,
             self.model_dir,

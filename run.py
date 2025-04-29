@@ -114,6 +114,7 @@ def print_cfg():
     print(f"|       WITH_DRAW_3D: {EXPERIMENT.WITH_DRAW_3D}")
     print(f"|       WITH_DRAW_HPAS: {EXPERIMENT.WITH_DRAW_HPAS}")
     print(f"|       WITH_STATISTIC_HPAS: {EXPERIMENT.WITH_STATISTIC_HPAS}")
+    print(f"|       PROJ_DIM: {EXPERIMENT.PROJ_DIM}")
     print(f"|   Point: {EXPERIMENT.POINT}")
     print(f"|   Analysis: {ANALYSIS.WITH_ANALYSIS}")
     print(f"|   Draw dataset: {ANALYSIS.WITH_DATASET}")
