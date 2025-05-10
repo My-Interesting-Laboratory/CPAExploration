@@ -223,8 +223,8 @@ if __name__ == "__main__":
         # 2. 多层MLP情况下, 每一层神经元数量固定, 如何影响到区域数量;
         *[lab1(TYPE.Random, [16] * i, in_features=4) for i in range(2, 4)],
         # 3. 多层MLP情况下, 随着某一层的宽度变动, 区域数量的增加关系;
-        *[lab1(TYPE.Random, [16, 16 * (2**i)], in_features=4) for i in range(0, 1)],
-        *[lab1(TYPE.Random, [16 * (2**i), 16], in_features=4) for i in range(0, 1)],
+        *[lab1(TYPE.Random, [16, 16 * (2**i)], in_features=4) for i in range(1, 4)],
+        *[lab1(TYPE.Random, [16 * (2**i), 16], in_features=4) for i in range(1, 4)],
     ]
 
     # lab2：层级中, 线性区域中穿越的超平面数量的分析;(再议)
@@ -274,7 +274,7 @@ if __name__ == "__main__":
     configs = [
         *lab1_conf,
         # *lab2_conf,
-        *lab3_conf,
+        # *lab3_conf,
         # *lab4_conf,
     ]
     for lab_config in configs:

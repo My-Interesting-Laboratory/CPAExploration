@@ -10,7 +10,7 @@ class CIFARNet(Model):
     ):
         super().__init__()
         self.name = name
-        self.n_relu = 3
+        self.depth = 3
 
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1)
         self.norm1 = norm_layer(16)
@@ -104,7 +104,7 @@ class CIFARLinearNet(Model):
     ):
         super().__init__()
         self.name = name
-        self.n_relu = 2
+        self.depth = 2
         self.flatten = nn.Flatten(1)
         self.fc1 = nn.Linear(3 * 32 * 32, 512)
         self.norm1 = norm_layer(512)

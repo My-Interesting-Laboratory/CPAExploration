@@ -1,5 +1,6 @@
-from logging import Logger
 import time
+import traceback
+from logging import Logger
 from typing import Callable, List, Tuple, TypeAlias
 
 import torch
@@ -143,3 +144,7 @@ def log_time(fun_name: str, indent: int = 0, logging: bool = True):
         return fun
 
     return wapper
+
+
+def err_callback(e: RuntimeError):
+    traceback.print_exception(e)

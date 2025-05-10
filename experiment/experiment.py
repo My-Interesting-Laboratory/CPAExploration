@@ -10,7 +10,7 @@ from torch.utils import data
 
 
 from torchays import nn
-from torchays.cpa import CPA, Model, distance, ProjectWrapper
+from torchays.cpa import CPAFactory, Model, distance, ProjectWrapper
 from torchays.utils import get_logger
 
 from .draw import DrawRegionImage
@@ -182,10 +182,10 @@ class _cpa(_base):
         self.depth = depth
 
     def _is_continue(self, model_name: str):
+        if "best" in model_name:
+            return not self.best_epoch
         epoch = float(model_name.split("_")[-1][:-4])
         if epoch in self.save_epoch:
-            return False
-        if self.best_epoch and "best" in model_name:
             return False
         return True
 
@@ -239,10 +239,10 @@ class CPAs(_cpa):
 
     def run(self):
         net, dataset, n_classes = self._init_model()
-        depth = self.depth if self.depth >= 0 else net.n_relu
+        depth = self.depth if self.depth >= 0 else net.depth
         val_dataloader = data.DataLoader(dataset, shuffle=True, pin_memory=True)
         input_size = self.input_size(net, dataset)
-        cpa = CPA(device=self.device, workers=self.workers)
+        cpa_factory = CPAFactory(device=self.device, workers=self.workers)
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
             print(f"Action: Net CPAs....")
@@ -264,14 +264,8 @@ class CPAs(_cpa):
                     os.path.join(save_dir, "region.log"),
                     multi=self.multi,
                 )
-                count = cpa.start(
-                    net,
-                    bounds=self.bounds,
-                    input_size=input_size,
-                    depth=depth,
-                    handler=handler,
-                    logger=logger,
-                )
+                cpa = cpa_factory.CPA(net=net, depth=depth, handler=handler, logger=logger)
+                count = cpa.start(input_size=input_size, bounds=self.bounds)
                 print(f"Region counts: {count}")
                 if self.is_draw:
                     draw_dir = os.path.join(save_dir, f"draw-region-{depth}")
@@ -333,10 +327,9 @@ class Points(_cpa):
 
     def run(self):
         net, dataset, _ = self._init_model()
-        depth = self.depth if self.depth >= 0 else net.n_relu
+        depth = self.depth if self.depth >= 0 else net.depth
         dataloader = data.DataLoader(dataset, shuffle=True, pin_memory=True)
-        input_size = self.input_size(net, dataset)
-        cpa = CPA(device=self.device)
+        cpa_factory = CPAFactory(device=self.device)
         model_list = os.listdir(self.model_dir)
         with torch.no_grad():
             print(f"Action: Point Distance ....")
@@ -355,15 +348,8 @@ class Points(_cpa):
                     i += 1
                     point: torch.Tensor = point[0].float()
                     handler = Handler()
-                    cpa.start(
-                        net,
-                        point,
-                        bounds=self.bounds,
-                        input_size=input_size,
-                        depth=depth,
-                        handler=handler,
-                        logger=logger,
-                    )
+                    cpa = cpa_factory.CPA(net=net, depth=depth, handler=handler, logger=logger)
+                    cpa.start(point=point, bounds=self.bounds)
                     values = self._handler_hpas(values, point, handler.hyperplane_arrangements)
                 draw_dir = os.path.join(save_dir, f"distance-count")
                 os.makedirs(draw_dir, exist_ok=True)

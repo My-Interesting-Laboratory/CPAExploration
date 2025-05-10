@@ -20,7 +20,7 @@ class TestNetLinear(nn.Module):
         self.name = name.replace(' ', '')
         self.handler = handler
         self.n_layers = len(layers)
-        self.n_relu = self.n_layers - 1
+        self.depth = self.n_layers - 1
         self.relu = nn.ReLU()
         self._norm_layer = norm_layer
         self.add_module("0", nn.Linear(in_features, layers[0], bias=True))
@@ -101,7 +101,7 @@ class TestResNet(nn.Module):
         self.name = name.replace(' ', '')
         self._is_no_res = is_no_res
         self.n_layers = len(layers)
-        self.n_relu = (self.n_layers - 1) * 2
+        self.depth = (self.n_layers - 1) * 2
         self.relu = nn.ReLU()
         self._norm_layer = norm_layer
         self.in_features = in_features

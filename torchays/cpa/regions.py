@@ -1,6 +1,6 @@
 from collections import deque
 from math import floor
-from typing import Deque, Iterable, List, Tuple
+from typing import Deque, List, Tuple
 
 import torch
 
@@ -32,7 +32,7 @@ class CPASet:
         try:
             return self._cpas.popleft()
         except:
-            raise StopIteration
+            raise StopIteration("CPASet next error")
 
     def __len__(self) -> int:
         return len(self._cpas)
@@ -66,7 +66,11 @@ class WapperRegion:
         self.filters.appendleft(torch.Tensor().type(torch.int8))
         self.regions: Deque[torch.Tensor] = deque()
         self._up_size = floor(self._upper / regions.size(1))
-        self.extend(regions)
+        self.cache: Deque[torch.Tensor] = deque()
+        self.extend(regions).down()
+
+    def __len__(self):
+        return len(self.regions)
 
     def __iter__(self):
         return self
@@ -78,7 +82,7 @@ class WapperRegion:
                 region = self.regions.popleft()
             return region
         except:
-            raise StopIteration
+            raise StopIteration("WapperRegion next error")
 
     def _update_list(self):
         self.output: torch.Tensor = self.regions.popleft()
@@ -95,25 +99,39 @@ class WapperRegion:
         except:
             return False
 
-    def update_filter(self, region: torch.Tensor):
+    def update_filter(self, region: torch.Tensor) -> bool:
         if self._check(region):
-            return
+            return False
         if self.filters[0].size(0) == self._up_size:
             self.filters.appendleft(torch.Tensor().type(torch.int8))
         self.filters[0] = torch.cat([self.filters[0], region.unsqueeze(0)], dim=0)
+        return True
 
     def register(self, region: torch.Tensor):
         if not self._check(region):
             self.regions.append(region)
 
     def extend(self, regions: List[torch.Tensor]):
-        for region in regions:
-            self.register(region)
+        self.cache.extend(regions)
+        return self
+
+    def down(self):
+        while len(self.cache) != 0:
+            self.register(self.cache.pop())
+
+
+class CPACacheFactory:
+    def __init__(self, is_handler: bool, depth: int):
+        self.depth = depth
+        self.is_handler = is_handler
+
+    def cpa_cache(self):
+        return CPACache(self.is_handler, self.depth)
 
 
 class CPACache(object):
-    def __init__(self, is_handler: bool, last_depth: int):
-        self.last_depth = last_depth
+    def __init__(self, is_handler: bool, depth: int):
+        self.depth = depth
         self.is_handler = is_handler
         self.cpa, self.hyperplane = self._empty_cpa, self._empty
         if is_handler:
@@ -125,13 +143,13 @@ class CPACache(object):
         return
 
     def _empty_cpa(self, cpa: CPAFunc):
-        return cpa.depth == self.last_depth
+        return cpa.depth > self.depth
 
     def _cpa(self, cpa: CPAFunc) -> bool:
-        if cpa.depth != self.last_depth:
-            return False
-        self.cpas.append((cpa.funcs, cpa.region, cpa.point))
-        return True
+        if cpa.depth > self.depth:
+            self.cpas.append((cpa.funcs, cpa.region, cpa.point))
+            return True
+        return False
 
     def _hyperplane(
         self,
@@ -144,9 +162,9 @@ class CPACache(object):
 
 
 class CPAHandler(object):
-    def __init__(self, handler: BaseHandler, last_depth: int):
+    def __init__(self, handler: BaseHandler, depth: int):
         self.handler = handler
-        self.last_depth = last_depth
+        self.depth = depth
         self.is_handler = self.handler is not None
         if self.is_handler:
             self.cpas: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = deque()
@@ -168,5 +186,5 @@ class CPAHandler(object):
         self.cpas.extend(cache.cpas)
         self.hyperplanes.extend(cache.hyperplanes)
 
-    def cpa_caches(self):
-        return CPACache(self.is_handler, self.last_depth)
+    def cpa_cache_factory(self):
+        return CPACacheFactory(self.is_handler, self.depth)

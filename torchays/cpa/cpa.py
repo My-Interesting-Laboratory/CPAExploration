@@ -1,12 +1,10 @@
 import multiprocessing as mp
 import os
 import time
-from collections import deque
-from copy import deepcopy
 from logging import Logger
 from multiprocessing.pool import AsyncResult
 from multiprocessing.reduction import ForkingPickler
-from typing import Callable, Deque, List, Tuple
+from typing import Callable, List, Tuple
 
 import numpy as np
 import torch
@@ -17,8 +15,44 @@ from ..utils import get_logger
 from .handler import BaseHandler
 from .model import Model
 from .optimization import cheby_ball, lineprog_intersect
-from .regions import CPAFunc, CPAHandler, CPASet, WapperRegion
-from .util import check_point, find_projection, generate_bound_regions, get_regions, log_time, vertify
+from .regions import CPACache, CPACacheFactory, CPAFunc, CPAHandler, CPASet, WapperRegion
+from .util import check_point, err_callback, find_projection, generate_bound_regions, get_regions, log_time, vertify
+
+
+class CPAFactory:
+    def __init__(
+        self,
+        workers: int = 1,
+        device: torch.device = torch.device("cpu"),
+        logger: Logger = None,
+        logging: bool = True,
+    ):
+        self.device = device
+        self.logger = logger or get_logger("CPAExploration-Console", multi=(workers > 1))
+        self.logging = logging
+        self.workers = workers if workers > 1 else 1
+
+    def CPA(
+        self,
+        net: Model,
+        depth: int = -1,
+        handler: BaseHandler = None,
+        logger: Logger = None,
+    ):
+        if logger is None:
+            logger = self.logger
+        return CPA(
+            net=net,
+            depth=depth,
+            handler=handler,
+            device=self.device,
+            workers=self.workers,
+            logger=logger,
+            logging=self.logging,
+        )
+
+    def __call__(self, *args, **kwds):
+        return self.CPA(*args, **kwds)
 
 
 class CPA:
@@ -28,79 +62,51 @@ class CPA:
         >>>     ''' layer is a "int" before every ReLU module. "Layer" can get the layer weight and bias graph.'''
         >>>     if depth == 1:
         >>>         return output
-
-    args:
-        device: torch.device
-            GPU or CPU to get the graph from the network;
-        logger: def info(...)
-            print the information (Default: print in console)(logger.info(...)).
     """
 
     def __init__(
         self,
+        net: Model,
+        depth: int = -1,
+        handler: BaseHandler = None,
         workers: int = 1,
         device: torch.device = torch.device("cpu"),
         logger: Logger = None,
         logging: bool = True,
     ):
-        self.workers = workers if workers > 1 else 1
+        assert isinstance(net, Module), "the type of net must be \"BaseModule\"."
+        self.net = net.graph().to(device)
+        depth = depth if depth >= 0 else net.depth
+        self.cpa_handler = CPAHandler(handler, depth)
         self.device = device
-        self.one = torch.ones(1).double()
-        self.logger = logger or get_logger("CPAExploration-Console", multi=(workers > 1))
         self.logging = logging
+        self.logger = logger
+        # muiti-processing
+        self.workers, self.pool = 1, None
+        if workers > 1:
+            self.workers = workers
+            self.pool = mp.Pool(processes=workers)
+
+    def __getstate__(self):
+        self_dict = self.__dict__.copy()
+        del self_dict["pool"], self_dict["net"], self_dict["cpa_handler"]
+        return self_dict
 
     def start(
         self,
-        net: Model,
         point: torch.Tensor = None,
-        bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
-        depth: int = -1,
         input_size: tuple = (2,),
-        handler: BaseHandler = None,
-        logger: Logger = None,
+        bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
     ) -> int | Tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None:
-        assert isinstance(net, Module), "the type of net must be \"BaseModule\"."
-        net = net.graph().to(self.device)
-        # Initialize the settings
-        relu_depth = depth if depth >= 0 else net.n_relu
-        # CPAFunc last depth
-        last_depth = relu_depth + 1
-        cpa_handler = CPAHandler(handler, last_depth)
-        if logger is not None:
-            self.logger = logger
-        # start
+        if input_size is None and point is None:
+            raise ValueError("input_size and point can not be None at the same time.")
         if point is None:
-            return self._start(net, cpa_handler, bounds=bounds, input_size=input_size)
-        return self._start_point(net, point, cpa_handler, bounds=bounds)
-
-    def _start(
-        self,
-        net: Model,
-        cpa_handler: CPAHandler,
-        *,
-        bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
-        input_size: tuple = (2,),
-    ) -> int:
-        # Initialize the parameters
-        net.origin_size = torch.Size(input_size)
-        dim = net.origin_size.numel()
-        # Initialize edge
-        p_funcs, p_region, p_inner_point, self.o_bounds = generate_bound_regions(bounds, dim)
-        # Initialize the region set.
-        cpa_set, cpa = CPASet(), CPAFunc(p_funcs, p_region, p_inner_point)
-        cpa_set.register(cpa)
-        # Start to get the NN regions.
-        self.logger.info("Start Get region number.")
-        start = time.time()
-        counts = self._get_counts(net, cpa_set, cpa_handler)
-        self.logger.info(f"CPAFunc counts: {counts}. Times: {time.time()-start}s")
-        return counts
+            return self._start(bounds=bounds, input_size=input_size)
+        return self._start_point(point, bounds=bounds)
 
     def _start_point(
         self,
-        net: Model,
         point: torch.Tensor,
-        cpa_handler: CPAHandler,
         *,
         bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -110,24 +116,25 @@ class CPA:
         neural_funcs: all neural functions in the parent region.
         """
         # Initialize the parameters
-        net.origin_size = point.size()
-        dim = net.origin_size.numel()
-        # Initialize edge
+        self.net.origin_size = point.size()
+        dim = self.net.origin_size.numel()
+        # Initialize edges
         p_funcs, p_region, _, self.o_bounds = generate_bound_regions(bounds, dim)
         # Initialize the region set.
         cpa_set, cpa = CPASet(), CPAFunc(p_funcs, p_region, point)
         cpa_set.register(cpa)
         # Start to get point region.
         self.logger.info("Start Get point cpa.")
-        point_cpa, neural_funcs = self._get_point_cpa(net, cpa_set, cpa_handler)
-        self.logger.info(f"End Get point cpa.")
+        start = time.time()
+        point_cpa, neural_funcs = self._get_point_cpa(cpa_set)
+        self.logger.info(f"End Get point cpa. Times: {time.time()-start}s")
         return point_cpa.funcs, point_cpa.region, neural_funcs
 
-    def _get_point_cpa(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> Tuple[CPAFunc, torch.Tensor]:
+    def _get_point_cpa(self, cpa_set: CPASet) -> Tuple[CPAFunc, torch.Tensor]:
         for p_cpa in cpa_set:
-            cpa_cache = cpa_handler.cpa_caches()
+            cpa_cache = self.cpa_handler.cpa_cache_factory().cpa_cache()
             # Get hyperplanes.
-            c_funcs = self._functions(net, p_cpa.point, p_cpa.depth)
+            c_funcs = self._functions(p_cpa.point, p_cpa.depth)
             intersect_funcs = self._find_intersect(p_cpa, c_funcs)
             if intersect_funcs is None:
                 c_cpa = CPAFunc(p_cpa.funcs, p_cpa.region, p_cpa.point, p_cpa.depth + 1)
@@ -143,41 +150,62 @@ class CPA:
                 self._nn_region_counts(c_cpa, cpa_set.register, cpa_cache.cpa)
             # Collect the information of the current parent region including region functions, child functions, intersect functions and number of the child regions.
             cpa_cache.hyperplane(p_cpa, c_funcs, intersect_funcs, 1)
-            cpa_handler.extend(cpa_cache)
-        cpa_handler()
+            self.cpa_handler.extend(cpa_cache)
+        self.cpa_handler()
         return c_cpa, c_funcs
 
+    def _start(
+        self,
+        *,
+        bounds: float | int | Tuple[float, float] | Tuple[Tuple[float, float]] = 1.0,
+        input_size: tuple = (2,),
+    ) -> int:
+        # Initialize the parameters
+        self.net.origin_size = torch.Size(input_size)
+        dim = self.net.origin_size.numel()
+        # Initialize edges
+        p_funcs, p_region, p_inner_point, self.o_bounds = generate_bound_regions(bounds, dim)
+        # Initialize the region set.
+        cpa_set, cpa = CPASet(), CPAFunc(p_funcs, p_region, p_inner_point)
+        cpa_set.register(cpa)
+        # Start to get the NN regions.
+        self.logger.info("Start Get region number.")
+        start = time.time()
+        counts = self._get_counts(cpa_set)
+        self.logger.info(f"CPAFunc counts: {counts}. Times: {time.time()-start}s")
+        return counts
+
     @log_time("CPAFunc counts")
-    def _get_counts(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> int:
-        if self.workers == 1:
-            return self._single_get_counts(net, cpa_set, cpa_handler)
+    def _get_counts(self, cpa_set: CPASet) -> int:
+        if self.pool is None:
+            return self._single_get_counts(cpa_set)
         # Multi-process
         # Change the ForkingPickler, and stop share memory of torch.Tensor when using multiprocessiong.
         # If share_memory is used, the large number of the fd will be created and lead to OOM.
         _save_reducers = ForkingPickler._extra_reducers
         ForkingPickler._extra_reducers = {}
-        counts = self._multiprocess_get_counts(net, cpa_set, cpa_handler)
+        counts = self._multiprocess_get_counts(cpa_set)
         ForkingPickler._extra_reducers = _save_reducers
         return counts
 
-    def _single_get_counts(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> int:
+    def _single_get_counts(self, cpa_set: CPASet) -> int:
         counts: int = 0
         for cpa in cpa_set:
-            c_funcs = self._functions(net, cpa.point, cpa.depth)
+            c_funcs = self._functions(cpa.point, cpa.depth)
             self.logger.info(f"Start to get regions. Depth: {cpa.depth+1}, ")
             # Find the child regions or get the region counts.
-            count, c_cpa_set, cpa_cache = self._handler_region(cpa, c_funcs, cpa_handler)
+            count, c_cpa_set, cpa_cache = self._handler_region(cpa, c_funcs, self.cpa_handler.cpa_cache_factory())
             counts += count
-            cpa_handler.extend(cpa_cache)
+            self.cpa_handler.extend(cpa_cache)
             cpa_set.extend(c_cpa_set)
-        cpa_handler()
+        self.cpa_handler()
         return counts
 
-    def _work(self, cpa: CPAFunc, c_funcs: torch.Tensor, cpa_handler: CPAHandler):
+    def _work(self, cpa: CPAFunc, c_funcs: torch.Tensor, factory: CPACacheFactory):
         self.logger.info(f"Start to get regions. Depth: {cpa.depth+1}, Process-PID: {os.getpid()}. ")
-        return self._handler_region(cpa, c_funcs, cpa_handler)
+        return self._handler_region(cpa, c_funcs, factory)
 
-    def _multiprocess_get_counts(self, net: Model, cpa_set: CPASet, cpa_handler: CPAHandler) -> int:
+    def _multiprocess_get_counts(self, cpa_set: CPASet) -> int:
         """This method of multi-process implementation will result in the inability to use multi-processing when searching the first layer."""
         counts: int = 0
 
@@ -185,21 +213,32 @@ class CPA:
             nonlocal counts
             count, c_cpa_set, cpa_cache = args
             counts += count
-            cpa_handler.extend(cpa_cache)
+            self.cpa_handler.extend(cpa_cache)
             cpa_set.extend(c_cpa_set)
 
-        def err_callback(msg):
-            print(msg)
-
-        copy_handler = deepcopy(cpa_handler)
-        pool = mp.Pool(processes=self.workers)
-        results: Deque[AsyncResult] = deque()
+        factory = self.cpa_handler.cpa_cache_factory()
+        results: List[AsyncResult] = []
         for cpa in cpa_set:
             # We do not calculate the weigh and bias in the sub-processes.
             # It will use the GPUs and CUDA, and there are many diffcult problems (memory copying, "spawn" model...) that need to be solved.
-            c_funcs = self._functions(net, cpa.point, cpa.depth)
+            c_funcs = self._functions(cpa.point, cpa.depth)
+
+            if cpa.depth == 0:
+                # The first layer only has one region.
+                # So, we do not need to use multi-processing to search the first layer.
+                # We can use the multi-processing to search the child regions.
+                self.logger.info(f"Start to get regions. Depth: {cpa.depth+1}.")
+                args = self._handler_region(cpa, c_funcs, factory)
+                callback(args)
+                continue
+
             # Multi-processing to search the CPAs.
-            res = pool.apply_async(func=self._work, args=(cpa, c_funcs, copy_handler), callback=callback, error_callback=err_callback)
+            res = self.pool.apply_async(
+                func=self._work,
+                args=(cpa, c_funcs, factory),
+                callback=callback,
+                error_callback=err_callback,
+            )
             # Clean finished processes.
             results = [r for r in results if not r.ready()]
             results.append(res)
@@ -209,23 +248,24 @@ class CPA:
                 res.wait()
                 if len(cpa_set) > 0:
                     break
+
         results.clear()
-        pool.close()
-        pool.join()
-        cpa_handler()
+        self.pool.close()
+        self.pool.join()
+        self.cpa_handler()
         return counts
 
-    def _functions(self, net: Model, x: torch.Tensor, depth: int):
+    def _functions(self, x: torch.Tensor, depth: int):
         # Get the list of the linear functions from DNN.
-        functions = self._net_2_cpa(net, x, depth)
+        functions = self._net_2_cpa(x, depth)
         # Scale the functions.
         return self._scale_functions(functions)
 
-    def _net_2_cpa(self, net: Model, x: torch.Tensor, depth: int) -> torch.Tensor:
+    def _net_2_cpa(self, x: torch.Tensor, depth: int) -> torch.Tensor:
         x = x.float().to(self.device)
-        x = x.reshape(*net.origin_size).unsqueeze(dim=0)
+        x = x.reshape(*self.net.origin_size).unsqueeze(dim=0)
         with torch.no_grad():
-            _, graph = net.forward_layer(x, depth=depth)
+            _, graph = self.net.forward_layer(x, depth=depth)
             # (1, *output.size(), *input.size())
             weight_graph, bias_graph = graph[WEIGHT_GRAPH], graph[BIAS_GRAPH]
             # (output.num, input.num)
@@ -252,39 +292,90 @@ class CPA:
         self,
         p_cpa: CPAFunc,
         c_funcs: torch.Tensor,
-        cpa_handler: CPAHandler,
+        factory: CPACacheFactory,
     ):
         """
         Search the child regions.
         """
-        c_cpa_set, cpa_cache = CPASet(), cpa_handler.cpa_caches()
-        counts, n_regions = 0, 0
+        c_cpa_set, cpa_cache = CPASet(), factory.cpa_cache()
         intersect_funcs, inner_points = self._find_intersect(p_cpa, c_funcs)
         if intersect_funcs is None:
-            n_regions = 1
             c_cpa = CPAFunc(p_cpa.funcs, p_cpa.region, p_cpa.point, p_cpa.depth + 1)
-            counts += self._nn_region_counts(c_cpa, c_cpa_set.register, cpa_cache.cpa)
+            n_regions = 1
+            counts = self._nn_region_counts(c_cpa, c_cpa_set.register, cpa_cache.cpa)
         else:
-            inner_points: torch.Tensor = torch.cat((inner_points, p_cpa.point.reshape(1, -1)))
-            c_regions = get_regions(inner_points, intersect_funcs)
-            # Register some regions in WapperRegion for iterate.
-            layer_regions = WapperRegion(c_regions)
-            for c_region in layer_regions:
-                # Check and get the child region. Then, the neighbor regions will be found.
-                c_cpa, filter_region, neighbor_regions = self._optimize_child_region(p_cpa, intersect_funcs, c_region)
-                if c_cpa is None:
-                    continue
-                # Add the region to prevent counting again.
-                layer_regions.update_filter(filter_region)
-                # Register new regions for iterate.
-                layer_regions.extend(neighbor_regions)
-                # Count the number of the regions in the current parent region.
-                n_regions += 1
-                # Handle the child region.
-                counts += self._nn_region_counts(c_cpa, c_cpa_set.register, cpa_cache.cpa)
+            counts, n_regions = self._search_regions(
+                p_cpa=p_cpa,
+                intersect_funcs=intersect_funcs,
+                inner_points=inner_points,
+                c_cpa_set=c_cpa_set,
+                cpa_cache=cpa_cache,
+            )
         # Collect the information of the current parent region including region functions, child functions, intersect functions and number of the child regions.
         cpa_cache.hyperplane(p_cpa, c_funcs, intersect_funcs, n_regions)
         return counts, c_cpa_set, cpa_cache
+
+    def _search_regions(
+        self,
+        p_cpa: CPAFunc,
+        intersect_funcs: torch.Tensor,
+        inner_points: torch.Tensor,
+        c_cpa_set: CPASet,
+        cpa_cache: CPACache,
+    ):
+
+        counts, n_regions = 0, 0
+        inner_points: torch.Tensor = torch.cat((inner_points, p_cpa.point.reshape(1, -1)))
+        c_regions = get_regions(inner_points, intersect_funcs)
+        # Register some regions in WapperRegion for iterate.
+        layer_regions = WapperRegion(c_regions)
+
+        def callback(args):
+            nonlocal counts, n_regions
+            c_cpa, filter_region, neighbor_regions = args
+            if c_cpa is None:
+                return
+            # Add the region to prevent counting again.
+            if not layer_regions.update_filter(filter_region):
+                return
+            # Register new regions for iterate.
+            layer_regions.extend(neighbor_regions)
+            # Count the number of the regions in the current parent region.
+            n_regions += 1
+            # Handle the child region.
+            counts += self._nn_region_counts(c_cpa, c_cpa_set.register, cpa_cache.cpa)
+
+        # Without multi-processing or the p_cpa is not the first layer.
+        # Check and get the child region. Then, the neighbor regions will be found.
+        if self.workers == 1 or p_cpa.depth != 0:
+            for c_region in layer_regions:
+                args = self._optimize_child_region(p_cpa, intersect_funcs, c_region)
+                callback(args)
+                layer_regions.down()
+            return counts, n_regions
+
+        # Multi-processing to search the child regions.
+        results: List[AsyncResult] = []
+        while len(layer_regions) != 0:
+            i = 0
+            for c_region in layer_regions:
+                res = self.pool.apply_async(
+                    func=self._optimize_child_region,
+                    args=(p_cpa, intersect_funcs, c_region),
+                    callback=callback,
+                    error_callback=err_callback,
+                )
+                results.append(res)
+                i += 1
+                if i == self.workers:
+                    break
+            # Wait for all processes to complete
+            for res in results:
+                res.wait()
+            layer_regions.down()
+            results.clear()
+
+        return counts, n_regions
 
     @log_time("Find intersect", 2, logging=False)
     def _find_intersect(self, p_cpa: CPAFunc, funcs: torch.Tensor) -> Tuple[torch.Tensor | None, torch.Tensor | None]:
