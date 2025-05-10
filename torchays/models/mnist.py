@@ -5,7 +5,7 @@ from ..cpa.model import Model
 class LeNet(Model):
     def __init__(self):
         super(LeNet, self).__init__()
-        self.n_relu = 3
+        self.depth = 3
         self.conv1 = nn.Conv2d(1, 6, kernel_size=5, padding=2)
         self.avg1 = nn.AvgPool2d(kernel_size=2, stride=2)
         self.conv2 = nn.Conv2d(6, 16, kernel_size=5)

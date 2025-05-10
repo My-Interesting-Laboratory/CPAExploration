@@ -3,14 +3,12 @@ from typing import Any, Dict, Tuple
 import torch
 from torch.nn import Parameter
 
-from torchays import graph
-
 from ..nn import Linear, Module
 from ..nn.modules import BIAS_GRAPH, WEIGHT_GRAPH
 
 
 class Model(Module):
-    n_relu: int
+    depth: int
     name: str
 
     def __init__(self, *args, **kwargs):
@@ -30,7 +28,7 @@ class ProjectWrapper(Model):
     ):
         super().__init__()
         self.model = model
-        self.n_relu = model.n_relu
+        self.depth = model.depth
         self.name = model.name
         self._wrapper = (proj_dims and proj_values) is not None
         if self._wrapper:

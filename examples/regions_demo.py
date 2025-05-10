@@ -19,7 +19,7 @@ np.random.seed(5)
 class TestNet(nn.Module):
     def __init__(self, input_size=(2,)):
         super(TestNet, self).__init__()
-        self.n_relu = 1
+        self.depth = 1
         self.relu = nn.ReLU()
         self.fc1 = nn.Linear(input_size[0], 16, bias=True)
         self.fc2 = nn.Linear(16, 16, bias=True)
