@@ -1,7 +1,6 @@
 from typing import Any, Callable, List, Optional, Type, Union
 
 import torch
-from torch import Tensor
 from torch.nn import init as nninit
 from torchvision.models._api import WeightsEnum
 from torchvision.models._utils import _ovewrite_named_param, handle_legacy_interface
@@ -20,7 +19,7 @@ from torchvision.models.resnet import (
 from torchvision.utils import _log_api_usage_once
 
 from .. import nn
-from ..nn.modules import get_input, WEIGHT_GRAPH, BIAS_GRAPH
+from ..nn.modules import Tensor, set_graph
 
 __all__ = [
     "ResNet",
@@ -67,17 +66,13 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
 
 
 class _Block(nn.Module):
-    def _plus(self, input, identity):
+    def _plus(self, input: Tensor, identity: Tensor):
         if self.graphing:
-            x, graph = get_input(input)
-            id_x, id_graph = get_input(identity)
-            o1 = x[0] + id_x[0]
-            o2 = graph[WEIGHT_GRAPH] + id_graph[WEIGHT_GRAPH]
-            o3 = graph[BIAS_GRAPH] + id_graph[BIAS_GRAPH]
-            return o1, {
-                WEIGHT_GRAPH: o2,
-                BIAS_GRAPH: o3,
-            }
+            return set_graph(
+                input + identity,
+                input.weight_graph + identity.weight_graph,
+                input.bias_graph + identity.bias_graph,
+            )
         return input + identity
 
 

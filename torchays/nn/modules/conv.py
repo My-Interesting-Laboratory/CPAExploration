@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -7,7 +5,7 @@ from torch.nn.common_types import _size_2_t
 from torch.nn.modules.utils import _pair
 
 from ..functional import conv2d
-from .base import Module
+from .base import Module, check_graph, set_graph
 
 
 class Conv2d(Module, nn.Conv2d):
@@ -33,12 +31,14 @@ class Conv2d(Module, nn.Conv2d):
         # TODO: 支持groups
         assert self.groups == 1, "Dont support other mode"
 
-    def forward_graph(self, input: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
+    def forward_graph(self, input: Tensor) -> Tensor:
         # bias_graph
+        output = nn.Conv2d.forward(self, input)
+        input, weight_graph, bias_graph = check_graph(input)
         bias_graph = torch.zeros_like(input, device=input.device, dtype=input.dtype) if bias_graph is None else bias_graph
         bias_graph = nn.Conv2d.forward(self, bias_graph)
         # weight_graph
-        origin_size = self._origin_size(input, weight_graph)
+        origin_size = self._origin_size(input)
         weight_graph = conv2d(
             weight_graph,
             self.weight,
@@ -54,4 +54,4 @@ class Conv2d(Module, nn.Conv2d):
             input.device,
             input.dtype,
         )
-        return weight_graph, bias_graph
+        return set_graph(output, weight_graph, bias_graph)

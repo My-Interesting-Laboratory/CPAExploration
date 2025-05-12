@@ -1,10 +1,8 @@
 import numpy as np
 import torch
-from torch import Tensor
 
 from torchays import nn
-from torchays.nn.modules import get_origin_size
-from torchays.nn.modules import WEIGHT_GRAPH, BIAS_GRAPH
+from torchays.nn.modules import Tensor
 
 GPU_ID = 0
 device = torch.device('cuda', GPU_ID) if torch.cuda.is_available() else torch.device('cpu')
@@ -37,12 +35,6 @@ class TestNet(nn.Module):
         x = self.linear(x)
         return x
 
-    def forward_graph(self, x, weight_graph: Tensor = None, bias_graph: Tensor = None):
-        input_size = get_origin_size(x, weight_graph)
-        bias_graph = bias_graph.reshape(bias_graph.size(0), -1)
-        weight_graph = weight_graph.reshape(weight_graph.size(0), -1, *input_size)
-        return weight_graph, bias_graph
-
 
 if __name__ == "__main__":
     net = TestNet().to(device)
@@ -50,9 +42,9 @@ if __name__ == "__main__":
 
     net.graph()
     with torch.no_grad():
-        output, graph = net(data)
-        weight, weight = graph.get(WEIGHT_GRAPH), graph.get(BIAS_GRAPH)
+        output: Tensor = net(data)
+        weight, bias = output.weight_graph, output.bias_graph
         print(output)
         for i in range(output.size(0)):
-            output = (weight[i] * data[i]).sum(dim=(1, 2, 3)) + weight[i]
+            output = (weight[i] * data[i]).sum(dim=(1, 2, 3)) + bias[i]
             print(output)

@@ -1,12 +1,11 @@
 from typing import Callable, Tuple
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn import init
-from torch import nn
 from torch.nn.parameter import Parameter
 
-from .base import Module, get_size_to_one
+from .base import Module, check_graph, get_size_to_one, set_graph
 
 
 class _norm(nn.Module):
@@ -56,24 +55,26 @@ class _Norm(Module, _norm):
     def __init__(self, num_features: int, freeze: bool = False, set_parameters: Callable[[Parameter, Parameter], None] = None, device=None, dtype=None) -> None:
         super().__init__(num_features, freeze, set_parameters, device, dtype)
 
-    def forward_graph(self, input: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor]:
+    def forward_graph(self, input: Tensor) -> Tensor:
+        output = _norm.forward(self, input)
+        input, weight_graph, bias_graph = check_graph(input)
         bias_graph = torch.zeros_like(input, device=input.device, dtype=input.dtype) if bias_graph is None else bias_graph
-        origin_size = self._origin_size(input, weight_graph)
+        origin_size = self._origin_size(input)
         bias_graph = _norm.forward(self, bias_graph)
         size = list(get_size_to_one(input.size()[1:]))
         size[0] = -1
 
         weight = self.weight
         weight_graph *= weight.view(*size, *get_size_to_one(origin_size))
-        return weight_graph, bias_graph
+        return set_graph(output, weight_graph, bias_graph)
 
 
 class NormNone(_Norm):
     def forward(self, input):
         return input
 
-    def forward_graph(self, _: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
-        return weight_graph, bias_graph
+    def forward_graph(self, input: Tensor) -> Tuple[Tensor, Tensor]:
+        return input
 
 
 class Norm1d(_Norm):

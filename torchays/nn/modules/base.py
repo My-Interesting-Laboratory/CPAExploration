@@ -1,12 +1,13 @@
-from typing import Any, Callable, Tuple
-
 import torch
 import torch.nn as nn
-from torch import Tensor
-
 
 WEIGHT_GRAPH = "weight_graph"
 BIAS_GRAPH = "bias_graph"
+
+
+class Tensor(torch.Tensor):
+    weight_graph: torch.Tensor = None
+    bias_graph: torch.Tensor = None
 
 
 def get_size_to_one(size: torch.Size):
@@ -14,20 +15,22 @@ def get_size_to_one(size: torch.Size):
     return torch.Size((1,) * len(size))
 
 
-def get_origin_size(input: torch.Tensor, weight_graph: torch.Tensor):
-    return weight_graph.size()[input.dim() :] if weight_graph is not None else input.size()[1:]
+def get_origin_size(input: Tensor):
+    if not hasattr(input, WEIGHT_GRAPH) or input.weight_graph is None:
+        return input.size()[1:]
+    return input.weight_graph.size()[input.dim() :]
 
 
-def get_input(input):
-    # TODO: WEIGHT_GRAPH与BIAS_GRAPH单独剔除与处理加入
-    if not isinstance(tuple(input)[-1], dict) or (WEIGHT_GRAPH not in tuple(input)[-1]) or (BIAS_GRAPH not in tuple(input)[-1]):
-        input = input if isinstance(input, tuple) else (input,)
-        return input, {
-            WEIGHT_GRAPH: None,
-            BIAS_GRAPH: None,
-        }
-    input = tuple(input)
-    return input[:-1], input[-1]
+def check_graph(x: Tensor):
+    if hasattr(x, WEIGHT_GRAPH) and hasattr(x, BIAS_GRAPH):
+        return x, x.weight_graph, x.bias_graph
+    return set_graph(x), None, None
+
+
+def set_graph(x: Tensor, wg: torch.Tensor = None, bg: torch.Tensor = None):
+    setattr(x, WEIGHT_GRAPH, wg)
+    setattr(x, BIAS_GRAPH, bg)
+    return x
 
 
 class Module(nn.Module):
@@ -47,12 +50,12 @@ class Module(nn.Module):
         self.graphing = False
         self.origin_size: torch.Size = None
 
-    def _origin_size(self, input: torch.Tensor, weight_graph: torch.Tensor):
+    def _origin_size(self, input: Tensor):
         if self.origin_size is None:
-            self.origin_size = get_origin_size(input, weight_graph)
+            self.origin_size = get_origin_size(input)
         return self.origin_size
 
-    def forward_graph(self, *input, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
+    def forward_graph(self, input):
         """
         forward_graph(Any):
 
@@ -81,28 +84,8 @@ class Module(nn.Module):
                 module.graph()
         return self
 
-    def __forward_graph(self, graph_forward: Callable[..., Any], *args, **kwargs):
-        """
-        If the results of "forward_graph" is "weight_graph, bias_graph", you can use this function to wapper the graph to a 'dict'.
-
-        return:
-            graph: {
-                "weight_graph": wg,
-                "bias_graph": bg,
-            }
-        """
-        output = super().forward(*args)
-        wg, bg = graph_forward(*args, **kwargs)
-        return output, {
-            WEIGHT_GRAPH: wg,
-            BIAS_GRAPH: bg,
-        }
-
-    def forward(self, input):
+    def forward(self, *args, **kwargs):
         if self.graphing:
-            args, kwargs = get_input(input)
-            return self.__forward_graph(self.forward_graph, *args, **kwargs)
+            return self.forward_graph(*args, **kwargs)
         else:
-            if not isinstance(input, tuple):
-                input = (input,)
-            return super().forward(*input)
+            return super().forward(*args, **kwargs)

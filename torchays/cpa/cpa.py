@@ -9,6 +9,8 @@ from typing import Callable, List, Tuple
 import numpy as np
 import torch
 
+from torchays.nn.modules.base import Tensor
+
 from ..nn import Module
 from ..nn.modules import BIAS_GRAPH, WEIGHT_GRAPH
 from ..utils import get_logger
@@ -265,9 +267,9 @@ class CPA:
         x = x.float().to(self.device)
         x = x.reshape(*self.net.origin_size).unsqueeze(dim=0)
         with torch.no_grad():
-            _, graph = self.net.forward_layer(x, depth=depth)
+            out: Tensor = self.net.forward_layer(x, depth=depth)
             # (1, *output.size(), *input.size())
-            weight_graph, bias_graph = graph[WEIGHT_GRAPH], graph[BIAS_GRAPH]
+            weight_graph, bias_graph = out.weight_graph, out.bias_graph
             # (output.num, input.num)
             weight_graph = weight_graph.reshape(-1, x.size()[1:].numel())
             # (output.num, 1)

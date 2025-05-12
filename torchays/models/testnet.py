@@ -3,7 +3,7 @@ from typing import Callable, List
 import torch
 
 from .. import nn
-from ..nn.modules import BIAS_GRAPH, WEIGHT_GRAPH, get_input
+from ..nn.modules import Tensor, set_graph
 
 
 class TestNetLinear(nn.Module):
@@ -187,17 +187,11 @@ class TestResNet(nn.Module):
 
         return out
 
-    def _forward_plus(self, input, identity):
+    def _forward_plus(self, input: Tensor, identity: Tensor):
         if self.graphing:
-            x, graph = get_input(input)
-            id_x, id_graph = get_input(identity)
-            o1 = x[0] + id_x[0]
-            o2 = graph[WEIGHT_GRAPH] + id_graph[WEIGHT_GRAPH]
-            o3 = graph[BIAS_GRAPH] + id_graph[BIAS_GRAPH]
-            return o1, {
-                WEIGHT_GRAPH: o2,
-                BIAS_GRAPH: o3,
-            }
-        else:
-            if not isinstance(input, tuple):
-                return input + identity
+            return set_graph(
+                input + identity,
+                input.weight_graph + identity.weight_graph,
+                input.bias_graph + identity.bias_graph,
+            )
+        return input + identity

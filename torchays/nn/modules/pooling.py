@@ -8,7 +8,7 @@ from torch.nn.common_types import _size_2_t, _size_any_opt_t, _size_any_t
 from torch.nn.modules.utils import _pair
 
 from ..functional import avg_pool_2d, max_pool_2d
-from .base import Module
+from .base import Module, check_graph, set_graph
 
 
 def _get_adaptive_pool_meta(output_side, input_side, padding_side=0):
@@ -30,12 +30,14 @@ class AvgPool2d(Module, nn.AvgPool2d):
         self._stride = _pair(stride)
         self._kernel_size = _pair(self.kernel_size)
 
-    def forward_graph(self, input: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
+    def forward_graph(self, input: Tensor) -> Tensor:
+        output = nn.AvgPool2d.forward(self, input)
+        input, weight_graph, bias_graph = check_graph(input)
         # bias_graph
         bias_graph = torch.zeros_like(input, device=input.device, dtype=input.dtype) if bias_graph is None else bias_graph
         bias_graph = nn.AvgPool2d.forward(self, bias_graph)
         # weight_graph
-        origin_size = self._origin_size(input, weight_graph)
+        origin_size = self._origin_size(input)
         divisor = self.divisor_override or self._kernel_size[0] * self._kernel_size[1]
         kernel_weight = torch.ones(self._kernel_size, device=input.device) / divisor
         weight_graph = avg_pool_2d(
@@ -50,7 +52,7 @@ class AvgPool2d(Module, nn.AvgPool2d):
             input.device,
             input.dtype,
         )
-        return weight_graph, bias_graph
+        return set_graph(output, weight_graph, bias_graph)
 
 
 class MaxPool2d(Module, nn.MaxPool2d):
@@ -59,12 +61,13 @@ class MaxPool2d(Module, nn.MaxPool2d):
     def __init__(self, kernel_size: _size_any_t, stride: _size_any_t | None = None, padding: _size_any_t = 0, dilation: _size_any_t = 1, return_indices: bool = False, ceil_mode: bool = False) -> None:
         super().__init__(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
 
-    def forward_graph(self, input: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
+    def forward_graph(self, input: Tensor) -> Tensor:
+        input, weight_graph, bias_graph = check_graph(input)
         save = self.return_indices
         if not self.return_indices:
             self.return_indices = True
         output, indices = nn.MaxPool2d.forward(self, input)
-        origin_size = self._origin_size(input, weight_graph)
+        origin_size = self._origin_size(input)
         weight_graph, bias_graph = max_pool_2d(
             indices,
             weight_graph,
@@ -75,7 +78,7 @@ class MaxPool2d(Module, nn.MaxPool2d):
             input.dtype,
         )
         self.return_indices = save
-        return weight_graph, bias_graph
+        return set_graph(output, weight_graph, bias_graph)
 
 
 class AdaptiveAvgPool2d(Module, nn.AdaptiveAvgPool2d):
@@ -84,12 +87,15 @@ class AdaptiveAvgPool2d(Module, nn.AdaptiveAvgPool2d):
         self._output_size = _pair(output_size)
 
     def forward_graph(self, input: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
+        output = nn.AvgPool2d.forward(self, input)
+
+        input, weight_graph, bias_graph = check_graph(input)
         kernel_size, stride, divisor = self._get_meta(input)
         # bias_graph
         bias_graph = torch.zeros_like(input, device=input.device, dtype=input.dtype) if bias_graph is None else bias_graph
         bias_graph = nn.AdaptiveAvgPool2d.forward(self, bias_graph)
         # weight_graph
-        origin_size = self._origin_size(input, weight_graph)
+        origin_size = self._origin_size(input)
         kernel_weight = torch.ones(kernel_size, device=input.device) / divisor
         weight_graph = avg_pool_2d(
             weight_graph,
@@ -103,7 +109,7 @@ class AdaptiveAvgPool2d(Module, nn.AdaptiveAvgPool2d):
             input.device,
             input.dtype,
         )
-        return weight_graph, bias_graph
+        return set_graph(output, weight_graph, bias_graph)
 
     def _get_meta(self, input: Tensor):
         _, _, input_w, input_h = input.size()

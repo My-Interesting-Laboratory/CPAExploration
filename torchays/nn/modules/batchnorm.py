@@ -1,10 +1,7 @@
-from typing import Tuple
-
 import torch
 import torch.nn as nn
-from torch import Tensor
 
-from .base import Module, get_size_to_one
+from .base import Module, Tensor, check_graph, get_size_to_one, set_graph
 
 
 class _BatchNorm(Module, nn.modules.batchnorm._BatchNorm):
@@ -21,14 +18,16 @@ class _BatchNorm(Module, nn.modules.batchnorm._BatchNorm):
         super().__init__(num_features, eps, momentum, affine, track_running_stats, device, dtype)
         assert self.track_running_stats, "Please set track_running_stats = True"
 
-    def forward_graph(self, input: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
+    def forward_graph(self, input: Tensor) -> Tensor:
         """
         Analyzing BatchNorm2d \n
         track_running_stats = True->Using saving var and mean.
         graph_size: ((*input.shape)), (*origin_size))
         """
+        output = nn.modules.batchnorm._BatchNorm.forward(self, input)
+        input, weight_graph, bias_graph = check_graph(input)
         bias_graph = torch.zeros_like(input, device=input.device, dtype=input.dtype) if bias_graph is None else bias_graph
-        origin_size = self._origin_size(input, weight_graph)
+        origin_size = self._origin_size(input)
         bias_graph = nn.modules.batchnorm._BatchNorm.forward(self, bias_graph)
 
         size = list(get_size_to_one(input.size()[1:]))
@@ -37,16 +36,7 @@ class _BatchNorm(Module, nn.modules.batchnorm._BatchNorm):
         weight = self.weight if self.affine else torch.ones(self.num_features, device=input.device, dtype=input.dtype)
         real_weight = (weight / torch.sqrt(self.running_var + self.eps)).view(*size, *get_size_to_one(origin_size))
         weight_graph *= real_weight
-
-        return weight_graph, bias_graph
-
-
-class BatchNormNone(_BatchNorm):
-    def forward(self, input):
-        return input
-
-    def forward_graph(self, _: Tensor, weight_graph: Tensor = None, bias_graph: Tensor = None) -> Tuple[Tensor, Tensor]:
-        return weight_graph, bias_graph
+        return set_graph(output, weight_graph, bias_graph)
 
 
 class BatchNorm1d(_BatchNorm):
