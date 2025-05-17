@@ -2,6 +2,9 @@ import torch
 
 
 class BaseHandler:
+    with_region: bool = False
+    with_hpas: bool = False
+
     def region(
         self,
         fun: torch.Tensor,

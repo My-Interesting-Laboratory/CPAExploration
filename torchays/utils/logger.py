@@ -34,7 +34,7 @@ class Logger(logging.Logger):
 def get_logger(
     title: str = "log",
     path: str = None,
-    formatter: logging.Formatter = logging.Formatter("[%(asctime)s] - %(name)s : %(message)s"),
+    formatter: logging.Formatter = logging.Formatter("[%(asctime)s] - %(levelname)s : %(message)s"),
     multi: bool = False,
 ):
     logger = logging.getLogger(title)

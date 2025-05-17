@@ -1,16 +1,16 @@
 import json
 import math
 import os
-from copy import deepcopy
 import time
+from copy import deepcopy
+from random import randint
 from typing import Any, Callable, Dict, List, Tuple
 
 import torch
 from torch.utils import data
 
-
 from torchays import nn
-from torchays.cpa import CPAFactory, Model, distance, ProjectWrapper
+from torchays.cpa import CPAFactory, Model, ProjectWrapper, distance
 from torchays.utils import get_logger
 
 from .draw import DrawRegionImage
@@ -258,9 +258,9 @@ class CPAs(_cpa):
                 acc = self.val_net(net, val_dataloader).cpu().numpy()
                 print(f"Accuracy: {acc:.4f}")
                 # CPA
-                handler = Handler() if self.is_draw or self.is_hpas else None
+                handler = Handler(self.is_draw, self.is_hpas)
                 logger = get_logger(
-                    f"region-{os.path.splitext(model_name)[0]}",
+                    f"{net.name}-{randint(-100,100)}-region_{os.path.splitext(model_name)[0]}",
                     os.path.join(save_dir, "region.log"),
                     multi=self.multi,
                 )
@@ -347,7 +347,7 @@ class Points(_cpa):
                 for point, _ in dataloader:
                     i += 1
                     point: torch.Tensor = point[0].float()
-                    handler = Handler()
+                    handler = Handler(False, True)
                     cpa = cpa_factory.CPA(net=net, depth=depth, handler=handler, logger=logger)
                     cpa.start(point=point, bounds=self.bounds)
                     values = self._handler_hpas(values, point, handler.hyperplane_arrangements)

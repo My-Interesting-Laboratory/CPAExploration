@@ -78,7 +78,7 @@ class CPA:
     ):
         assert isinstance(net, Module), "the type of net must be \"BaseModule\"."
         self.net = net.graph().to(device)
-        depth = depth if depth >= 0 else net.depth
+        self.depth = depth if depth >= 0 else net.depth
         self.cpa_handler = CPAHandler(handler, depth)
         self.device = device
         self.logging = logging
@@ -87,7 +87,6 @@ class CPA:
         self.workers, self.pool = 1, None
         if workers > 1:
             self.workers = workers
-            self.pool = mp.Pool(processes=workers)
 
     def __getstate__(self):
         self_dict = self.__dict__.copy()
@@ -179,13 +178,14 @@ class CPA:
 
     @log_time("CPAFunc counts")
     def _get_counts(self, cpa_set: CPASet) -> int:
-        if self.pool is None:
+        if self.workers == 1:
             return self._single_get_counts(cpa_set)
         # Multi-process
         # Change the ForkingPickler, and stop share memory of torch.Tensor when using multiprocessiong.
         # If share_memory is used, the large number of the fd will be created and lead to OOM.
         _save_reducers = ForkingPickler._extra_reducers
         ForkingPickler._extra_reducers = {}
+        self.pool = mp.Pool(processes=self.workers)
         counts = self._multiprocess_get_counts(cpa_set)
         ForkingPickler._extra_reducers = _save_reducers
         return counts

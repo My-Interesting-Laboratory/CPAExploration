@@ -9,8 +9,13 @@ from .hpa import HyperplaneArrangement
 
 
 class Handler(BaseHandler):
-    def __init__(self) -> None:
-        self._init_region()._init_inner_hyperplanes()
+    def __init__(self, with_regions: bool, with_hpas: bool) -> None:
+        self.with_region = with_regions
+        self.with_hpas = with_hpas
+        if with_regions:
+            self._init_region()
+        if with_hpas:
+            self._init_inner_hyperplanes
 
     def _init_region(self):
         self.funs = list()

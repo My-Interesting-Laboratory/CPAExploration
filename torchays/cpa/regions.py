@@ -1,5 +1,8 @@
 from collections import deque
 from math import floor
+from multiprocessing import Pipe
+from multiprocessing.connection import Connection
+import threading
 from typing import Deque, List, Tuple
 
 import torch
@@ -121,23 +124,25 @@ class WapperRegion:
 
 
 class CPACacheFactory:
-    def __init__(self, is_handler: bool, depth: int):
+    def __init__(self, with_regions: bool, with_hpas: bool, depth: int):
         self.depth = depth
-        self.is_handler = is_handler
+        self.with_regions = with_regions
+        self.with_hpas = with_hpas
 
     def cpa_cache(self):
-        return CPACache(self.is_handler, self.depth)
+        return CPACache(self.with_regions, self.with_hpas, self.depth)
 
 
-class CPACache(object):
-    def __init__(self, is_handler: bool, depth: int):
+class CPACache:
+    def __init__(self, with_regions: bool, with_hpas: bool, depth: int):
         self.depth = depth
-        self.is_handler = is_handler
         self.cpa, self.hyperplane = self._empty_cpa, self._empty
-        if is_handler:
+        if with_regions:
             self.cpas: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = deque()
+            self.cpa = self._cpa
+        if with_hpas:
             self.hyperplanes: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int, int]] = deque()
-            self.cpa, self.hyperplane = self._cpa, self._hyperplane
+            self.hyperplane = self._hyperplane
 
     def _empty(self, *args, **kargs):
         return
@@ -163,28 +168,30 @@ class CPACache(object):
 
 class CPAHandler(object):
     def __init__(self, handler: BaseHandler, depth: int):
-        self.handler = handler
+        self.handler = handler if handler is not None else BaseHandler()
         self.depth = depth
-        self.is_handler = self.handler is not None
-        if self.is_handler:
-            self.cpas: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = deque()
-            self.hyperplanes: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int, int]] = deque()
+        self.cpas: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = deque()
+        self.hyperplanes: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int, int]] = deque()
 
     def __call__(self):
-        if not self.is_handler:
-            return
-        for funcs, region, inner_point in self.cpas:
-            self.handler.region(funcs, region, inner_point)
-        self.cpas.clear()
-        for args in self.hyperplanes:
-            self.handler.inner_hyperplanes(*args)
-        self.hyperplanes.clear()
+        if self.handler.with_region:
+            for funcs, region, inner_point in self.cpas:
+                self.handler.region(funcs, region, inner_point)
+            self.cpas.clear()
+        if self.handler.with_hpas:
+            for args in self.hyperplanes:
+                self.handler.inner_hyperplanes(*args)
+            self.hyperplanes.clear()
 
     def extend(self, cache: CPACache):
-        if not self.is_handler:
-            return
-        self.cpas.extend(cache.cpas)
-        self.hyperplanes.extend(cache.hyperplanes)
+        if self.handler.with_region:
+            self.cpas.extend(cache.cpas)
+        if self.handler.with_hpas:
+            self.hyperplanes.extend(cache.hyperplanes)
 
     def cpa_cache_factory(self):
-        return CPACacheFactory(self.is_handler, self.depth)
+        return CPACacheFactory(
+            self.handler.with_region,
+            self.handler.with_hpas,
+            self.depth,
+        )
